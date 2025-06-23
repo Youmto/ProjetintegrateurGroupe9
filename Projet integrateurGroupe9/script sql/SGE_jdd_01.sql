@@ -19,9 +19,9 @@ VALUES
 (4, 'Technicien', 'technicien');
 
 -- INDIVIDUS
-INSERT INTO INDIVIDU(idIndividu, nom, adresse, telephone, email)
+INSERT INTO INDIVIDU(idIndividu, nom, adresse, telephone, email,password)
 VALUES 
-(1, 'Jean Dupont', '101 Rue des Employés, Montréal', '+15145554567', 'jean.dupont@sac.ca'),
+(1, 'Jean Dupont', '101 Rue des Employés, Montréal', '+15145554567', 'jean.dupont@sac.ca','Youmto12'),
 (2, 'Marie Tremblay', '202 Ave des Gestionnaires, Laval', '+15145555678', 'marie.tremblay@sac.ca'),
 (3, 'Pierre Gagnon', '303 Blvd des Techniciens, Longueuil', '+15145556789', 'pierre.gagnon@sac.ca');
 
@@ -35,9 +35,9 @@ VALUES
 -- PRODUITS
 INSERT INTO PRODUIT(idProduit, reference, nom, description, marque, modele, type, estMaterielEmballage)
 VALUES 
-(1, 'PROD-001', 'Ordinateur portable', 'Ordinateur portable 15 pouces', 'Dell', 'XPS 15', 'materiel', FALSE),
-(2, 'PROD-002', 'Boîte carton', 'Boîte carton moyen format', 'Uline', 'M-10', 'materiel', TRUE),
-(3, 'PROD-003', 'Logiciel gestion', 'Logiciel de gestion d entrepôt', 'SAP', 'WM 2.0', 'logiciel', FALSE);
+(6, 'PROD-001', 'Ordinateur portable', 'Ordinateur portable 15 pouces', 'Dell', 'XPS 15', 'materiel', FALSE),
+(4, 'PROD-002', 'Boîte carton', 'Boîte carton moyen format', 'Uline', 'M-10', 'materiel', TRUE),
+(5, 'PROD-003', 'Logiciel gestion', 'Logiciel de gestion d entrepôt', 'SAP', 'WM 2.0', 'logiciel', FALSE);
 
 -- PRODUITS MATERIELS
 INSERT INTO PRODUIT_MATERIEL(idProduit, longueur, largeur, hauteur, masse, volume)
@@ -48,7 +48,7 @@ VALUES
 -- PRODUITS LOGICIELS
 INSERT INTO PRODUIT_LOGICIEL(idProduit, version, typeLicence, dateExpiration)
 VALUES 
-(3, '2.0.1', 'perpetuelle', NULL);
+(5, '2.0.1', 'perpetuelle','2025-06-21');
 
 -- FOURNISSEURS
 INSERT INTO FOURNISSEUR(idOrganisation)
@@ -67,11 +67,11 @@ VALUES
 (1, 'Entrepôt principal', '123 Rue de l Entrepôt Montréal', '+15145557890', 'Entrepôt principal de la SAC', 100000.0, 'actif');
 
 -- CELLULES
-INSERT INTO CELLULE(idCellule, reference, longueur, largeur, hauteur, masseMaximale, volumeMaximal, statut, position)
+INSERT INTO CELLULE(idCellule, reference, longueur, largeur, hauteur, masseMaximale, volumeMaximal, statut,capacite_max , position)
 VALUES 
-(1, 'E0-A1', 100.0, 100.0, 250.0, 1000.0, 2500000.0, 'actif', 'Zone E0, Rack A, Niveau 1'),
-(2, 'E1-B2', 100.0, 100.0, 250.0, 1000.0, 2500000.0, 'actif', 'Zone E1, Rack B, Niveau 2'),
-(3, 'EMB-1', 50.0, 50.0, 50.0, 500.0, 125000.0, 'actif', 'Zone emballage, Rack 1');
+(1, 'E0-A1', 100.0, 100.0, 250.0, 1000.0, 2500000.0, 'actif',20, 'Zone E0, Rack A, Niveau 1'),
+(2, 'E1-B2', 100.0, 100.0, 250.0, 1000.0, 2500000.0, 'actif',50, 'Zone E1, Rack B, Niveau 2'),
+(3, 'EMB-1', 50.0, 50.0, 50.0, 500.0, 125000.0, 'actif',60, 'Zone emballage, Rack 1');
 
 -- COMPOSITION ENTREPOT
 INSERT INTO COMPOSER_ENTREPOT(idEntrepot, idCellule)
@@ -81,11 +81,11 @@ VALUES
 (1, 3);
 
 -- LOTS
-INSERT INTO LOT(idLot, numeroLot, quantiteInitiale, quantiteDisponible, dateProduction, dateExpiration, statut)
+INSERT INTO LOT(idLot, numeroLot, quantiteInitiale, quantiteDisponible, dateProduction, dateExpiration, statut,idProduit)
 VALUES 
-(1, 'LOT-2023-001', 50, 50, '2023-01-15', '2025-01-15', 'actif'),
-(2, 'LOT-2023-002', 100, 100, '2023-02-20', NULL, 'actif'),
-(3, 'LOT-2023-003', 200, 200, '2023-03-10', '2026-03-10', 'actif');
+(4, 'LOT-2023-001', 50, 50, '2023-01-15', '2025-01-15', 'actif',1),
+(5, 'LOT-2023-002', 100, 100, '2023-02-20', NULL, 'actif',2),
+(6, 'LOT-2023-003', 200, 200, '2023-03-10', '2026-03-10', 'actif',2);
 
 -- INVENTAIRE
 INSERT INTO INVENTAIRE(idProduit, idOrganisation, quantiteDisponible)
