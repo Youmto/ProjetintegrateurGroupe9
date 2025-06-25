@@ -102,6 +102,15 @@ def create_reception(conn, reference, date_prevue, id_responsable):
     execute_query(conn, query, (id_responsable, bon_id))
     return bon_id
 
+def deplacer_lot(conn, id_lot, id_cellule_source, id_cellule_destination, quantite, id_responsable):
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT deplacer_lot(%s, %s, %s, %s, %s)
+        """, (id_lot, id_cellule_source, id_cellule_destination, quantite, id_responsable))
+        conn.commit()
+        return True
+
+
 def get_pending_expeditions(conn):
     """
     Récupère toutes les expéditions en statut 'en_attente' ou 'en_cours'

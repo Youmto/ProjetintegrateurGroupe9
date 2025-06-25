@@ -2,6 +2,7 @@ from PyQt5.QtWidgets import (
     QMainWindow, QTabWidget, QWidget,
     QVBoxLayout, QStatusBar
 )
+from views.deplacement import DeplacementModule
 from PyQt5.QtCore import Qt, QTimer
 from datetime import datetime
 import inspect
@@ -20,17 +21,23 @@ from views.rapports import RapportsModule
 from views.supervision import SupervisionModule
 from views.admin import AdminModule
 from views.mouvements import MouvementsModule
+from views.produits import ProduitsModule
+
 # ➤ Suppression de: from views.alertes import AlertesModule
 
 class MainWindow(QMainWindow):
     MODULE_ARG_MAP: Dict[Type[QWidget], Tuple[str, ...]] = {
-        MouvementsModule: ('conn',),
+        MouvementsModule: ('conn','user'),
         SupervisionModule: ('conn', 'user'),
         ReceptionModule: ('conn', 'user'),
         ExpeditionModule: ('conn', 'user'),
         InventaireModule: ('conn', 'user'),
         RapportsModule: ('conn', 'user'),
-        AdminModule: ('conn', 'user')
+        AdminModule: ('conn', 'user'),
+        DeplacementModule: ('conn', 'user'),
+        ProduitsModule: ('conn','user')
+
+        
     }
 
     def __init__(self, parent=None, db_conn=None, user=None):
@@ -101,20 +108,23 @@ class MainWindow(QMainWindow):
 
             # Modules toujours disponibles
             self._add_module("Inventaire", InventaireModule)
-            self._add_module("Mouvements", MouvementsModule)
+            
 
             # Modules conditionnels
             if any('magasinier' in r for r in roles):
                 logger.info("Chargement des modules magasinier")
                 self._add_module("Réception", ReceptionModule)
                 self._add_module("Expédition", ExpeditionModule)
-
+                self._add_module("Déplacement", DeplacementModule)
+                self._add_module("Produits", ProduitsModule)
+                self._add_module("Mouvements", MouvementsModule)
             if any('responsable' in r for r in roles):
                 logger.info("Chargement des modules responsable")
                 self._add_module("Rapports", RapportsModule)
                 self._add_module("Supervision", SupervisionModule)
                 self._add_module("Administration", AdminModule)
-
+                self._add_module("Déplacements", DeplacementModule)
+                
             logger.info(f"Nombre d'onglets chargés: {self.tab_widget.count()}")
 
         except Exception as e:
