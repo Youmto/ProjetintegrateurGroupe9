@@ -1,0 +1,105 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/26.2.15 Chrome/134.0.6998.205 Electron/35.2.1 Safari/537.36" version="26.2.15">
+  <diagram name="Page-1" id="pLj24-voHkpnkVFvbbZd">
+    <mxGraphModel dx="1676" dy="1913" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="fWwntvf5ia0amgbRQnvg-1" value="Destinataires" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="60" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-2" value="SGE" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;" vertex="1" parent="1">
+          <mxGeometry x="374" y="110" width="180" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-3" value="Transporteurs/livreur" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="470" y="490" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-4" value="&lt;span style=&quot;text-wrap-mode: nowrap;&quot;&gt;Fournisseurs&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-20" y="400" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-5" value="&lt;span style=&quot;text-wrap-mode: nowrap;&quot;&gt;Responsable et agents&amp;nbsp;&lt;/span&gt;&lt;div style=&quot;text-wrap-mode: nowrap;&quot;&gt;de la logistique&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="870" y="180" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-6" value="&lt;span style=&quot;text-wrap-mode: nowrap;&quot;&gt;Agents&lt;/span&gt;&lt;div style=&quot;text-wrap-mode: nowrap;&quot;&gt;de la logistique&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="404" y="-110" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-8" value="" style="curved=1;endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="fWwntvf5ia0amgbRQnvg-4" target="fWwntvf5ia0amgbRQnvg-2">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="240" y="350" as="sourcePoint" />
+            <mxPoint x="340" y="280" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="180" y="420" />
+              <mxPoint x="270" y="400" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-9" value="Envoie produits" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;rotation=0;" vertex="1" parent="1">
+          <mxGeometry x="165" y="380" width="110" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-13" value="Notifications" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;rotation=0;" vertex="1" parent="1">
+          <mxGeometry x="140" y="155" width="90" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-14" value="" style="curved=1;endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="fWwntvf5ia0amgbRQnvg-2" target="fWwntvf5ia0amgbRQnvg-1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="190" y="247" as="sourcePoint" />
+            <mxPoint x="336" y="120" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="270" y="210" />
+              <mxPoint x="60" y="150" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-16" value="" style="curved=1;endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="fWwntvf5ia0amgbRQnvg-3" target="fWwntvf5ia0amgbRQnvg-2">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="520" y="127" as="sourcePoint" />
+            <mxPoint x="666" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="550" y="340" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-17" value="Livraisons" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;rotation=0;" vertex="1" parent="1">
+          <mxGeometry x="505" y="380" width="80" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-20" value="" style="curved=1;endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="fWwntvf5ia0amgbRQnvg-2" target="fWwntvf5ia0amgbRQnvg-5">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="812" y="10" as="sourcePoint" />
+            <mxPoint x="380" y="177" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="590" y="270" />
+              <mxPoint x="840" y="300" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-21" value="Saisie et controle" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;rotation=0;" vertex="1" parent="1">
+          <mxGeometry x="655" y="100" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-22" value="" style="curved=1;endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="fWwntvf5ia0amgbRQnvg-5" target="fWwntvf5ia0amgbRQnvg-2">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="350" y="85" as="sourcePoint" />
+            <mxPoint x="596" y="-70" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="830" y="130" />
+              <mxPoint x="630" y="110" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-23" value="Rapports" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;rotation=0;" vertex="1" parent="1">
+          <mxGeometry x="690" y="280" width="70" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-29" value="" style="curved=1;endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="fWwntvf5ia0amgbRQnvg-6" target="fWwntvf5ia0amgbRQnvg-2">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="170" y="-10" as="sourcePoint" />
+            <mxPoint x="503" y="67" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="540" y="-40" />
+              <mxPoint x="560" y="30" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fWwntvf5ia0amgbRQnvg-30" value="Saisissent les données&lt;div&gt;des produits entrants et sortant,&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;rotation=0;" vertex="1" parent="1">
+          <mxGeometry x="440" y="-5" width="190" height="40" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
