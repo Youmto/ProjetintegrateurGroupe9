@@ -1,4 +1,3 @@
-# views/alertes.py
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QSpinBox, QPushButton, QLabel,
     QTableWidget, QTableWidgetItem, QFileDialog, QMessageBox,
@@ -17,14 +16,16 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
 import matplotlib.pyplot as plt
+from datetime import date
+from matplotlib.ticker import MaxNLocator
 
-class  RapportsModule(QWidget):
+class RapportsModule(QWidget):
     """Vue dédiée à l'affichage et l'export des alertes"""
     
-    def __init__(self, conn,user):
-        self.user = user
+    def __init__(self, conn, user):
         super().__init__()
         self.conn = conn
+        self.user = user
         self.data = None
         self.init_ui()
 
@@ -37,6 +38,7 @@ class  RapportsModule(QWidget):
         
         # Configuration de la table
         self.table = QTableWidget()
+        self.table.setAlternatingRowColors(True)
         layout.addWidget(self.table)
         
         self.setLayout(layout)
@@ -64,6 +66,7 @@ class  RapportsModule(QWidget):
         btn_layout = QHBoxLayout()
         buttons = [
             ("Rechercher", self.load_data),
+            ("Effacer", self.clear_table),
             ("Exporter CSV", self.export_csv),
             ("Exporter PDF", self.export_pdf),
             ("Afficher graphique", self.show_chart)
@@ -76,6 +79,13 @@ class  RapportsModule(QWidget):
 
         layout.addLayout(btn_layout)
 
+    def clear_table(self):
+        """Efface les résultats affichés"""
+        self.table.clear()
+        self.table.setRowCount(0)
+        self.table.setColumnCount(0)
+        self.data = None
+
     def load_data(self):
         """Charge les données via le contrôleur"""
         mode = self.mode_selector.currentText()
@@ -87,14 +97,18 @@ class  RapportsModule(QWidget):
             "Cellules vides": lambda: handle_cellules_vides(self.conn)
         }
 
-        self.data = controller_map.get(mode, lambda: [])()
-        self.update_table()
+        try:
+            self.data = controller_map.get(mode, lambda: [])()
+            if not self.data:
+                QMessageBox.information(self, "Information", "Aucune donnée trouvée.")
+            self.update_table()
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors du chargement : {str(e)}")
 
     def update_table(self):
         """Met à jour l'affichage tabulaire"""
         if not self.data:
-            QMessageBox.information(self, "Alerte", "Aucune donnée trouvée.")
-            self.table.clear()
+            self.clear_table()
             return
 
         self.table.setRowCount(len(self.data))
@@ -102,7 +116,7 @@ class  RapportsModule(QWidget):
         self.table.setHorizontalHeaderLabels(list(self.data[0].keys()))
 
         for row, item in enumerate(self.data):
-            for col, val in enumerate(item.values()):
+            for col, (key, val) in enumerate(item.items()):
                 self.table.setItem(row, col, QTableWidgetItem(str(val)))
         
         self.table.resizeColumnsToContents()
@@ -116,7 +130,7 @@ class  RapportsModule(QWidget):
         path, _ = QFileDialog.getSaveFileName(
             self, 
             "Exporter vers CSV", 
-            "alertes.csv", 
+            f"alertes_{date.today().strftime('%Y%m%d')}.csv", 
             "CSV Files (*.csv)"
         )
         
@@ -125,12 +139,12 @@ class  RapportsModule(QWidget):
 
         try:
             with open(path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=self.data[0].keys())
+                writer = csv.DictWriter(f, fieldnames=self.data[0].keys(), delimiter=';')
                 writer.writeheader()
                 writer.writerows(self.data)
             QMessageBox.information(self, "Export", f"Exporté avec succès vers {path}")
         except Exception as e:
-            QMessageBox.critical(self, "Erreur export", str(e))
+            QMessageBox.critical(self, "Erreur export", f"Erreur lors de l'export CSV : {str(e)}")
 
     def export_pdf(self):
         """Génère un rapport PDF"""
@@ -141,7 +155,7 @@ class  RapportsModule(QWidget):
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Exporter vers PDF",
-            "alertes.pdf",
+            f"alertes_{date.today().strftime('%Y%m%d')}.pdf",
             "PDF Files (*.pdf)"
         )
 
@@ -152,20 +166,23 @@ class  RapportsModule(QWidget):
             self.generate_pdf_report(path)
             QMessageBox.information(self, "Export", f"PDF exporté avec succès: {path}")
         except Exception as e:
-            QMessageBox.critical(self, "Erreur export PDF", str(e))
+            QMessageBox.critical(self, "Erreur export PDF", f"Erreur lors de l'export PDF : {str(e)}")
 
     def generate_pdf_report(self, path):
         """Génère le contenu PDF"""
         c = canvas.Canvas(path, pagesize=A4)
         width, height = A4
+        page_num = 1
         
         # En-tête
         c.setFont("Helvetica-Bold", 14)
-        c.drawString(2*cm, height - 2*cm, f"{self.mode_selector.currentText()}")
+        c.drawString(2*cm, height - 2*cm, f"{self.mode_selector.currentText()} - {date.today().strftime('%d/%m/%Y')}")
+        c.setFont("Helvetica", 8)
+        c.drawString(2*cm, height - 2.5*cm, f"Généré par : {self.user.get('nom', 'Utilisateur inconnu')}")
         
         # Contenu
         c.setFont("Helvetica", 10)
-        y_position = height - 3*cm
+        y_position = height - 3.5*cm
         headers = list(self.data[0].keys())
         col_width = 3*cm
         
@@ -173,18 +190,40 @@ class  RapportsModule(QWidget):
         for i, header in enumerate(headers):
             c.drawString(2*cm + i*col_width, y_position, header)
         
+        y_position -= 0.7*cm
+        c.line(2*cm, y_position + 0.2*cm, 2*cm + len(headers)*col_width, y_position + 0.2*cm)
         y_position -= 0.5*cm
         
         # Dessin des données
-        for row in self.data:
-            for i, value in enumerate(row.values()):
-                c.drawString(2*cm + i*col_width, y_position, str(value))
+        for row_idx, row in enumerate(self.data):
+            for i, header in enumerate(headers):
+                c.drawString(2*cm + i*col_width, y_position, str(row.get(header, '')))
             
-            y_position -= 0.5*cm
-            if y_position < 2*cm:
+            y_position -= 0.7*cm
+            if y_position < 2*cm and row_idx < len(self.data) - 1:
+                # Pied de page
+                c.setFont("Helvetica", 8)
+                c.drawString(2*cm, 1.5*cm, f"Page {page_num}")
                 c.showPage()
+                page_num += 1
                 y_position = height - 2*cm
+                
+                # Nouvelle page
+                c.setFont("Helvetica-Bold", 14)
+                c.drawString(2*cm, height - 2*cm, f"{self.mode_selector.currentText()} (suite)")
+                c.setFont("Helvetica", 10)
+                y_position = height - 3*cm
+                
+                # Réafficher les en-têtes
+                for i, header in enumerate(headers):
+                    c.drawString(2*cm + i*col_width, y_position, header)
+                y_position -= 0.7*cm
+                c.line(2*cm, y_position + 0.2*cm, 2*cm + len(headers)*col_width, y_position + 0.2*cm)
+                y_position -= 0.5*cm
         
+        # Pied de page final
+        c.setFont("Helvetica", 8)
+        c.drawString(2*cm, 1.5*cm, f"Page {page_num}")
         c.save()
 
     def show_chart(self):
@@ -195,6 +234,7 @@ class  RapportsModule(QWidget):
 
         mode = self.mode_selector.currentText()
         plt.figure(figsize=(10, 6))
+        plt.style.use('ggplot')
         
         if mode == "Produits expirant bientôt":
             self.plot_expiration_chart()
@@ -211,22 +251,49 @@ class  RapportsModule(QWidget):
 
     def plot_expiration_chart(self):
         """Génère le graphique des expirations"""
-        noms = [item['nom'] for item in self.data]
-        jours = [item['jours_restants'] for item in self.data]
-        plt.barh(noms, jours, color='orange')
+        # Tri des données par jours restants
+        sorted_data = sorted(self.data, key=lambda x: x['jours_restants'])
+        noms = [item['nom'] for item in sorted_data]
+        jours = [item['jours_restants'] for item in sorted_data]
+        
+        bars = plt.barh(noms, jours, color='orange')
         plt.xlabel("Jours restants")
-        plt.title("Produits expirant bientôt")
+        plt.title(f"Produits expirant dans moins de {self.jours.value()} jours")
+        
+        # Ajout des valeurs sur les barres
+        for bar in bars:
+            width = bar.get_width()
+            plt.text(width + 0.5, bar.get_y() + bar.get_height()/2,
+                    f'{int(width)}', ha='left', va='center')
 
     def plot_occupation_chart(self):
         """Génère le graphique d'occupation"""
-        noms = [item['reference'] for item in self.data]
-        taux = [item['pourcentage_occupation'] for item in self.data]
-        plt.barh(noms, taux, color='teal')
+        # Tri des données par pourcentage
+        sorted_data = sorted(self.data, key=lambda x: x['pourcentage_occupation'])
+        noms = [item['reference'] for item in sorted_data]
+        taux = [item['pourcentage_occupation'] for item in sorted_data]
+        
+        bars = plt.barh(noms, taux, color='teal')
         plt.xlabel("% Occupation")
         plt.title("Occupation des cellules")
+        plt.xlim(0, 100)
+        
+        # Ajout des valeurs sur les barres
+        for bar in bars:
+            width = bar.get_width()
+            plt.text(width + 1, bar.get_y() + bar.get_height()/2,
+                    f'{width:.1f}%', ha='left', va='center')
 
     def plot_rupture_chart(self):
         """Génère le graphique des ruptures"""
-        noms = [item['nom'] for item in self.data]
+        noms = [item['nom'] for item in self.data if 'nom' in item]
         plt.bar(noms, [1]*len(noms), color='red')
-        plt.title("Produits en rupture")
+        plt.title("Produits en rupture de stock")
+        plt.yticks([])  # Masquer l'axe Y
+        plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+
+        # Ajout des labels sur les barres
+        for i, nom in enumerate(noms):
+            plt.text(i, 0.5, nom, ha='center', va='center', rotation=90, color='white')
+
+        plt.xticks(rotation=45)  # optionnel si beaucoup de produits

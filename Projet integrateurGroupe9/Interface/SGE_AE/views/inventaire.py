@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QLineEdit, QPushButton, QTableWidget, 
     QTableWidgetItem, QComboBox, QMessageBox,
-    QHeaderView
+    QHeaderView, QGroupBox
 )
 from PyQt5.QtCore import Qt
 from models.stock_model import search_products, get_product_details, get_stock_locations
@@ -18,8 +18,8 @@ class InventaireModule(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Barre de recherche
-        search_group = QWidget()
+        # Barre de recherche améliorée
+        search_group = QGroupBox("Recherche de produits")
         search_layout = QHBoxLayout()
         
         search_layout.addWidget(QLabel("Recherche:"))
@@ -35,6 +35,11 @@ class InventaireModule(QWidget):
         search_btn.clicked.connect(self.search_products)
         search_layout.addWidget(search_btn)
         
+        # Bouton pour les produits en rupture
+        out_of_stock_btn = QPushButton("Produits en rupture")
+        out_of_stock_btn.clicked.connect(self.load_out_of_stock)
+        search_layout.addWidget(out_of_stock_btn)
+        
         search_group.setLayout(search_layout)
         layout.addWidget(search_group)
         
@@ -46,23 +51,23 @@ class InventaireModule(QWidget):
             "Marque", "Modèle", "Type", "Emballage"
         ])
         
-        # Configuration du redimensionnement
         header = self.products_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID
-        header.setSectionResizeMode(1, QHeaderView.Stretch)  # Référence
-        header.setSectionResizeMode(2, QHeaderView.Stretch)  # Nom
-        header.setSectionResizeMode(3, QHeaderView.Interactive)  # Description
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Marque
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Modèle
-        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # Type
-        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)  # Emballage
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.Interactive)
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
         
         self.products_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.products_table.doubleClicked.connect(self.show_product_details)
         layout.addWidget(self.products_table)
         
-        # Section détails
-        self.details_group = QWidget()
+        # Section détails améliorée
+        self.details_group = QGroupBox("Détails du produit")
+        self.details_group.setVisible(False)
         details_layout = QVBoxLayout()
         
         self.product_title = QLabel()
@@ -85,21 +90,37 @@ class InventaireModule(QWidget):
         details_layout.addWidget(self.locations_table)
         
         self.details_group.setLayout(details_layout)
-        self.details_group.setVisible(False)
         layout.addWidget(self.details_group)
         
         self.setLayout(layout)
 
+    def clear_details(self):
+        """Nettoie les détails affichés"""
+        self.details_table.setRowCount(0)
+        self.locations_table.setRowCount(0)
+        self.product_title.setText("")
+        self.details_group.setVisible(False)
+
     def search_products(self):
-        search_term = self.search_input.text()
+        search_term = self.search_input.text().strip()
+        
+        # Mapping amélioré pour le type de produit
+        type_map = {
+            "Matériel": "materiel",
+            "Logiciel": "logiciel",
+            "Emballage": "emballage"
+        }
         product_type = self.search_type.currentText()
+        type_filter = None if product_type == "Tous" else type_map.get(product_type)
         
         try:
-            products = search_products(
-                self.db_conn,
-                search_term,
-                None if product_type == "Tous" else product_type.lower()
-            )
+            products = search_products(self.db_conn, search_term, type_filter)
+            
+            if not products:
+                QMessageBox.information(self, "Aucun résultat", "Aucun produit correspondant trouvé.")
+                self.products_table.setRowCount(0)
+                self.clear_details()
+                return
             
             self.products_table.setRowCount(len(products))
             for row, product in enumerate(products):
@@ -114,20 +135,26 @@ class InventaireModule(QWidget):
                     "Oui" if product.get('estMaterielEmballage', False) else "Non"))
             
             self.products_table.resizeColumnsToContents()
-            self.details_group.setVisible(False)
+            self.clear_details()
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Échec de la recherche: {str(e)}")    
-     
+            QMessageBox.critical(self, "Erreur", f"Échec de la recherche: {str(e)}")
+            self.clear_details()
+    
     def show_product_details(self, index):
-        product_id = int(self.products_table.item(index.row(), 0).text())
-        
+        if not index.isValid():
+            return
+            
         try:
+            self.clear_details()
+            product_id = int(self.products_table.item(index.row(), 0).text())
+            
             product = get_product_details(self.db_conn, product_id)
             if not product:
                 raise ValueError("Produit non trouvé")
             
             self.product_title.setText(f"{product['reference']} - {product['nom']}")
             
+            # Construction des détails de base
             base_fields = [
                 ("ID Produit", product['idProduit']),
                 ("Référence", product['reference']),
@@ -140,11 +167,11 @@ class InventaireModule(QWidget):
             ]
             
             self.details_table.setRowCount(len(base_fields))
-            
             for row, (field_name, field_value) in enumerate(base_fields):
                 self.details_table.setItem(row, 0, QTableWidgetItem(field_name))
                 self.details_table.setItem(row, 1, QTableWidgetItem(str(field_value)))
             
+            # Ajout des spécificités selon le type de produit
             if product['type'] == 'materiel':
                 current_rows = self.details_table.rowCount()
                 self.details_table.setRowCount(current_rows + 5)
@@ -175,9 +202,9 @@ class InventaireModule(QWidget):
                     self.details_table.setItem(row, 0, QTableWidgetItem(field_name))
                     self.details_table.setItem(row, 1, QTableWidgetItem(str(field_value)))
             
+            # Affichage des emplacements de stockage
             locations = get_stock_locations(self.db_conn, product_id)
             self.locations_table.setRowCount(len(locations))
-            
             for row, loc in enumerate(locations):
                 self.locations_table.setItem(row, 0, QTableWidgetItem(loc.get('reference_cellule', '')))
                 self.locations_table.setItem(row, 1, QTableWidgetItem(loc.get('nom_entrepot', '')))
@@ -190,4 +217,35 @@ class InventaireModule(QWidget):
             
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Échec du chargement des détails: {str(e)}")
-            print(f"Erreur détaillée: {e}")
+            self.clear_details()
+
+    def load_out_of_stock(self):
+        """Charge les produits en rupture de stock"""
+        try:
+            products = handle_ruptures(self.db_conn)
+            
+            if not products:
+                QMessageBox.information(self, "Aucun résultat", "Aucun produit en rupture de stock.")
+                self.products_table.setRowCount(0)
+                self.clear_details()
+                return
+                
+            self.products_table.setRowCount(len(products))
+            for row, product in enumerate(products):
+                self.products_table.setItem(row, 0, QTableWidgetItem(str(product['idProduit'])))
+                self.products_table.setItem(row, 1, QTableWidgetItem(product['reference']))
+                self.products_table.setItem(row, 2, QTableWidgetItem(product['nom']))
+                self.products_table.setItem(row, 3, QTableWidgetItem(product.get('description', '')))
+                self.products_table.setItem(row, 4, QTableWidgetItem(product.get('marque', '')))
+                self.products_table.setItem(row, 5, QTableWidgetItem(product.get('modele', '')))
+                self.products_table.setItem(row, 6, QTableWidgetItem(product['type']))
+                self.products_table.setItem(row, 7, QTableWidgetItem(
+                    "Oui" if product.get('estMaterielEmballage', False) else "Non"))
+            
+            self.products_table.resizeColumnsToContents()
+            self.clear_details()
+            QMessageBox.information(self, "Produits en rupture", 
+                                   f"{len(products)} produits en rupture de stock trouvés.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec du chargement des ruptures: {str(e)}")
+            self.clear_details()

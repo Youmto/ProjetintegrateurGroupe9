@@ -23,23 +23,24 @@ class AdminModule(QWidget):
         self.users = []
         self.roles = []
         self.orgs = []
-        self.init_ui()
-        logger.info("Module Admin initialisé")
+        self.setup_ui()
+        self.load_data()
+        logger.info("[AdminModule] Initialisé")
 
-    def init_ui(self):
+    def setup_ui(self):
         layout = QVBoxLayout()
 
+        layout.addWidget(QLabel("Utilisateurs"))
         self.user_list = QListWidget()
         self.user_list.itemSelectionChanged.connect(self.refresh_roles)
-        layout.addWidget(QLabel("Utilisateurs"))
         layout.addWidget(self.user_list)
 
-        self.role_combo = QComboBox()
         layout.addWidget(QLabel("Rôle à attribuer/retirer"))
+        self.role_combo = QComboBox()
         layout.addWidget(self.role_combo)
 
-        self.org_combo = QComboBox()
         layout.addWidget(QLabel("Organisation"))
+        self.org_combo = QComboBox()
         layout.addWidget(self.org_combo)
 
         self.current_roles_label = QLabel("Rôles actuels : Aucun utilisateur sélectionné")
@@ -57,7 +58,6 @@ class AdminModule(QWidget):
 
         layout.addLayout(btn_layout)
         self.setLayout(layout)
-        self.load_data()
 
     def load_data(self):
         try:
@@ -72,14 +72,13 @@ class AdminModule(QWidget):
             self.populate_role_combo()
             self.populate_org_combo()
         except Exception as e:
-            logger.error("Erreur chargement données: %s", str(e))
-            QMessageBox.critical(self, "Erreur", str(e))
+            logger.exception("Erreur chargement données")
+            QMessageBox.critical(self, "Erreur", f"Chargement échoué : {e}")
 
     def populate_role_combo(self):
         self.role_combo.clear()
         for role in self.roles:
-            display_text = f"{role['libelle']} ({role['typeRole']})"
-            self.role_combo.addItem(display_text, role['id'])
+            self.role_combo.addItem(f"{role['libelle']} ({role['typeRole']})", role['id'])
 
     def populate_org_combo(self):
         self.org_combo.clear()
@@ -91,12 +90,12 @@ class AdminModule(QWidget):
         return self.users[row] if 0 <= row < len(self.users) else None
 
     def selected_role(self):
-        index = self.role_combo.currentIndex()
-        return self.roles[index] if 0 <= index < len(self.roles) else None
+        idx = self.role_combo.currentIndex()
+        return self.roles[idx] if 0 <= idx < len(self.roles) else None
 
     def selected_organisation(self):
-        index = self.org_combo.currentIndex()
-        return self.orgs[index] if 0 <= index < len(self.orgs) else None
+        idx = self.org_combo.currentIndex()
+        return self.orgs[idx] if 0 <= idx < len(self.orgs) else None
 
     def refresh_roles(self):
         user = self.selected_user()
@@ -106,44 +105,44 @@ class AdminModule(QWidget):
 
         try:
             roles = get_roles_for_user(self.conn, user['id'])
-            role_names = [role['libelle'] for role in roles]
-            self.current_roles_label.setText(f"Rôles actuels pour {user['nom']} : {', '.join(role_names)}")
+            role_names = [r['libelle'] for r in roles]
+            self.current_roles_label.setText(
+                f"Rôles actuels pour {user['nom']} : {', '.join(role_names) if role_names else 'Aucun'}"
+            )
         except Exception as e:
-            logger.error("Erreur rafraîchissement rôles: %s", str(e))
+            logger.exception("Erreur rafraîchissement rôles")
             self.current_roles_label.setText("Erreur lors du chargement des rôles")
 
     def assign_role(self):
-        user = self.selected_user()
-        role = self.selected_role()
-        org = self.selected_organisation()
-        if not user or not role or not org:
-            QMessageBox.warning(self, "Champ manquant", "Sélectionnez un utilisateur, un rôle et une organisation")
+        user, role, org = self.selected_user(), self.selected_role(), self.selected_organisation()
+        if not (user and role and org):
+            QMessageBox.warning(self, "Sélection incomplète", "Utilisateur, rôle et organisation requis.")
             return
 
         try:
-            if activate_user_role(self.conn, user['id'], role['id'], org['id']):
+            success = activate_user_role(self.conn, user['id'], role['id'], org['id'])
+            if success:
                 QMessageBox.information(self, "Succès", f"Rôle attribué à {user['nom']}")
                 self.refresh_roles()
             else:
-                QMessageBox.warning(self, "Attention", "Ce rôle est déjà attribué")
+                QMessageBox.information(self, "Déjà attribué", "Ce rôle est déjà actif.")
         except Exception as e:
-            logger.error("Erreur attribution rôle: %s", str(e))
-            QMessageBox.critical(self, "Erreur", str(e))
+            logger.exception("Erreur lors de l'attribution du rôle")
+            QMessageBox.critical(self, "Erreur", f"Attribution échouée : {e}")
 
     def revoke_role(self):
-        user = self.selected_user()
-        role = self.selected_role()
-        org = self.selected_organisation()
-        if not user or not role or not org:
-            QMessageBox.warning(self, "Champ manquant", "Sélectionnez un utilisateur, un rôle et une organisation")
+        user, role, org = self.selected_user(), self.selected_role(), self.selected_organisation()
+        if not (user and role and org):
+            QMessageBox.warning(self, "Sélection incomplète", "Utilisateur, rôle et organisation requis.")
             return
 
         try:
-            if deactivate_user_role(self.conn, user['id'], role['id'], org['id']):
+            success = deactivate_user_role(self.conn, user['id'], role['id'], org['id'])
+            if success:
                 QMessageBox.information(self, "Succès", f"Rôle révoqué pour {user['nom']}")
                 self.refresh_roles()
             else:
-                QMessageBox.warning(self, "Non attribué", "Ce rôle n'était pas attribué")
+                QMessageBox.information(self, "Non attribué", "Ce rôle n'était pas actif.")
         except Exception as e:
-            logger.error("Erreur révocation rôle: %s", str(e))
-            QMessageBox.critical(self, "Erreur", str(e))
+            logger.exception("Erreur lors de la révocation du rôle")
+            QMessageBox.critical(self, "Erreur", f"Révocation échouée : {e}")

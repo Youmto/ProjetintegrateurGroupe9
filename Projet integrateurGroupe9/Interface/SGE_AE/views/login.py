@@ -38,23 +38,44 @@ class LoginWindow(QWidget):
         login_btn.clicked.connect(self.handle_login)
         layout.addWidget(login_btn)
         
+        # Connexion via touche Entrée
+        self.email_input.returnPressed.connect(self.handle_login)
+        self.password_input.returnPressed.connect(self.handle_login)
+        
+        # Label caché pour accessibilité
+        self.accessibility_label = QLabel("Formulaire de connexion au système de gestion d'entrepôt")
+        self.accessibility_label.setAccessibleName("Formulaire de connexion")
+        self.accessibility_label.hide()
+        layout.addWidget(self.accessibility_label)
+        
         self.setLayout(layout)
     
     def handle_login(self):
-        email = self.email_input.text()
-        password = self.password_input.text()
+        email = self.email_input.text().strip()
+        password = self.password_input.text().strip()
         
         if not email or not password:
             QMessageBox.warning(self, "Champs manquants", 
-                               "Veuillez remplir tous les champs")
+                              "Veuillez remplir tous les champs")
             return
         
-        user = authenticate_user(self.db_conn, email, password)
-        if user:
-            self.close()
-            from views.main_window import MainWindow
-            self.main_window = MainWindow(db_conn=self.db_conn, user=user)
-            self.main_window.show()
-        else:
-            QMessageBox.critical(self, "Échec de connexion", 
-                                "Email ou mot de passe incorrect")
+        try:
+            user = authenticate_user(self.db_conn, email, password)
+            if user:
+                # Feedback visuel avant transition
+                self.setEnabled(False)
+                QMessageBox.information(self, "Connexion réussie", 
+                                      f"Bienvenue {user['email']} {user['nom']}")
+                self.close()
+                
+                from views.main_window import MainWindow
+                self.main_window = MainWindow(db_conn=self.db_conn, user=user)
+                self.main_window.show()
+            else:
+                QMessageBox.critical(self, "Échec de connexion", 
+                                   "Email ou mot de passe incorrect")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur technique", 
+                               f"Une erreur est survenue :\n{str(e)}")
+            # Réactiver l'interface en cas d'erreur
+            self.setEnabled(True)

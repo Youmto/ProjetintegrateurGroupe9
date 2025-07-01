@@ -22,6 +22,9 @@ from views.supervision import SupervisionModule
 from views.admin import AdminModule
 from views.mouvements import MouvementsModule
 from views.produits import ProduitsModule
+from views.cellules import CellulesModule
+from views.livreur_confirmation import LivreurConfirmationWindow
+from views.lot_detail import LotDetailWindow
 
 # ➤ Suppression de: from views.alertes import AlertesModule
 
@@ -35,8 +38,10 @@ class MainWindow(QMainWindow):
         RapportsModule: ('conn', 'user'),
         AdminModule: ('conn', 'user'),
         DeplacementModule: ('conn', 'user'),
-        ProduitsModule: ('conn','user')
-
+        ProduitsModule: ('conn','user'),
+        CellulesModule:('conn','user'),
+        LivreurConfirmationWindow: ('conn', 'user'),
+        LotDetailWindow: ('conn', 'user')
         
     }
 
@@ -118,6 +123,13 @@ class MainWindow(QMainWindow):
                 self._add_module("Déplacement", DeplacementModule)
                 self._add_module("Produits", ProduitsModule)
                 self._add_module("Mouvements", MouvementsModule)
+                self._add_module("Cellules", CellulesModule)
+                self._add_module("Lot Detail", LotDetailWindow)
+            
+            if any('livreur' in r for r in roles):
+                logger.info("Chargement des modules Livreur")
+                self._add_module("Livreur", LivreurConfirmationWindow)
+
             if any('responsable' in r for r in roles):
                 logger.info("Chargement des modules responsable")
                 self._add_module("Rapports", RapportsModule)

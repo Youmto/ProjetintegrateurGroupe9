@@ -9,6 +9,7 @@ logging.basicConfig(level=logging.WARNING)
 logging.getLogger('matplotlib').setLevel(logging.ERROR)
 
 
+
 def main():
     # Créer l'application Qt
     app = QApplication(sys.argv)
