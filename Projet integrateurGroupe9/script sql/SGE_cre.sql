@@ -1,119 +1,39 @@
--- =============================================
--- SGE_cre.sql
--- Schéma complet avec domaines personnalisés
--- Système de Gestion d'Entrepôt (SGE)
--- Projet Amazones et Centaures (SAC)
--- Basé sur le modèle fourni
--- =============================================
+-- ================================
+-- SGE_STRUCTURE_PRO.sql
+-- Base complète robuste pour Système de Gestion d’Entrepôt (SGE)
+-- Amazones et Centaures (SAC)
+-- ================================
 
--- Suppression des tables existantes (pour réinitialisation)
-DROP TABLE IF EXISTS GENERER_RAPPORT CASCADE;
-DROP TABLE IF EXISTS RAPPORT_EXCEPTION CASCADE;
-DROP TABLE IF EXISTS RESPONSABLE_EXPEDITION CASCADE;
-DROP TABLE IF EXISTS EXPEDIER_COLIS CASCADE;
-DROP TABLE IF EXISTS BON_EXPEDITION CASCADE;
-DROP TABLE IF EXISTS RESPONSABLE_RECEPTION CASCADE;
-DROP TABLE IF EXISTS RECEVOIR_COLIS CASCADE;
-DROP TABLE IF EXISTS BON_RECEPTION CASCADE;
-DROP TABLE IF EXISTS UTILISER_EMBALLAGE CASCADE;
-DROP TABLE IF EXISTS STOCKER CASCADE;
-DROP TABLE IF EXISTS CONTENIR CASCADE;
-DROP TABLE IF EXISTS COLIS CASCADE;
-DROP TABLE IF EXISTS LOT CASCADE;
-DROP TABLE IF EXISTS COMPOSER_ENTREPOT CASCADE;
-DROP TABLE IF EXISTS CELLULE CASCADE;
-DROP TABLE IF EXISTS ENTREPOT CASCADE;
-DROP TABLE IF EXISTS INVENTAIRE CASCADE;
-DROP TABLE IF EXISTS APPROVISIONNER CASCADE;
-DROP TABLE IF EXISTS FOURNISSEUR CASCADE;
-DROP TABLE IF EXISTS PRODUIT_LOGICIEL CASCADE;
-DROP TABLE IF EXISTS PRODUIT_MATERIEL CASCADE;
-DROP TABLE IF EXISTS PRODUIT CASCADE;
-DROP TABLE IF EXISTS AFFECTER_ROLE CASCADE;
-DROP TABLE IF EXISTS INDIVIDU CASCADE;
-DROP TABLE IF EXISTS ROLE CASCADE;
-DROP TABLE IF EXISTS ORGANISATION CASCADE;
-
--- Suppression des domaines existants
-DROP DOMAIN IF EXISTS dom_id CASCADE;
-DROP DOMAIN IF EXISTS dom_nom CASCADE;
-DROP DOMAIN IF EXISTS dom_texte CASCADE;
-DROP DOMAIN IF EXISTS dom_telephone CASCADE;
-DROP DOMAIN IF EXISTS dom_email CASCADE;
-DROP DOMAIN IF EXISTS dom_date CASCADE;
-DROP DOMAIN IF EXISTS dom_boolean CASCADE;
-DROP DOMAIN IF EXISTS dom_type CASCADE;
-DROP DOMAIN IF EXISTS dom_reference CASCADE;
-DROP DOMAIN IF EXISTS dom_quantite CASCADE;
-DROP DOMAIN IF EXISTS dom_float CASCADE;
-DROP DOMAIN IF EXISTS dom_position CASCADE;
-DROP DOMAIN IF EXISTS dom_statut CASCADE;
-DROP DOMAIN IF EXISTS DOM_TYPE_PRODUIT CASCADE;
-DROP DOMAIN IF EXISTS DOM_TYPE_ROLE CASCADE;
+-- Suppression préalable
+DROP SCHEMA public CASCADE;
+CREATE SCHEMA public;
 
 -- =============================
 -- DOMAINES PERSONNALISÉS
 -- =============================
---Domaine pour le password
-CREATE DOMAIN dm_password AS VARCHAR(255)
-CONSTRAINT chk_password_length CHECK (LENGTH(VALUE) >= 8);
--- Domaine pour les identifiants
-CREATE DOMAIN dom_id AS INTEGER
-CHECK (VALUE > 0);
 
--- Domaine pour les noms
-CREATE DOMAIN dom_nom AS VARCHAR(100)
-CHECK (VALUE !~ '^\s*$');
-
--- Domaine pour les textes longs
+CREATE DOMAIN dom_id AS INTEGER CHECK (VALUE > 0);
+CREATE DOMAIN dom_nom AS VARCHAR(100) CHECK (VALUE !~ '^\s*$');
 CREATE DOMAIN dom_texte AS TEXT;
-
--- Domaine pour les téléphones
-CREATE DOMAIN dom_telephone AS VARCHAR(20)
-CHECK (VALUE ~ '^[0-9+][0-9 -]*$');
-
--- Domaine pour les emails
-CREATE DOMAIN dom_email AS VARCHAR(100)
-CHECK (VALUE ~ '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$');
-
--- Domaine pour les dates
+CREATE DOMAIN dom_telephone AS VARCHAR(20) CHECK (VALUE ~ '^[0-9+][0-9 -]*$');
+CREATE DOMAIN dom_email AS VARCHAR(100) CHECK (VALUE ~ '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$');
 CREATE DOMAIN dom_date AS DATE;
-
--- Domaine pour les booléens
 CREATE DOMAIN dom_boolean AS BOOLEAN;
-
--- Domaine pour les types génériques
 CREATE DOMAIN dom_type AS VARCHAR(50);
-
--- Domaine pour les références
-CREATE DOMAIN dom_reference AS VARCHAR(50)
-CHECK (VALUE !~ '^\s*$');
-
--- Domaine pour les quantités
-CREATE DOMAIN dom_quantite AS INTEGER
-CHECK (VALUE >= 0);
-
--- Domaine pour les valeurs décimales
-CREATE DOMAIN dom_float AS FLOAT
-CHECK (VALUE >= 0);
-
--- Domaine pour les positions
+CREATE DOMAIN dom_reference AS VARCHAR(50) CHECK (VALUE !~ '^\s*$');
+CREATE DOMAIN dom_quantite AS INTEGER CHECK (VALUE >= 0);
+CREATE DOMAIN dom_float AS FLOAT CHECK (VALUE >= 0);
 CREATE DOMAIN dom_position AS VARCHAR(50);
-
--- Domaine pour les statuts
-CREATE DOMAIN dom_statut AS VARCHAR(20)
-CHECK (VALUE IN ('actif', 'inactif', 'en_attente', 'en_cours', 'termine', 'annule','normal','elevee'));
-
--- Domaine pour les types de produits
-CREATE DOMAIN DOM_TYPE_PRODUIT AS VARCHAR(50)
-CHECK (VALUE IN ('materiel', 'logiciel', 'service'));
-
--- Domaine pour les types de rôles
-CREATE DOMAIN DOM_TYPE_ROLE AS VARCHAR(50)
-CHECK (VALUE IN ('magasinier', 'responsable', 'livreur', 'technicien', 'gestionnaire', 'securite'));
+CREATE DOMAIN dom_statut AS VARCHAR(20) CHECK (
+    VALUE IN ('actif', 'inactif', 'en_attente', 'en_cours', 'termine', 'annule', 'pret_a_expedier',)
+);
+CREATE DOMAIN dom_type_produit AS VARCHAR(50) CHECK (VALUE IN ('materiel', 'logiciel', 'service'));
+CREATE DOMAIN dom_type_role AS VARCHAR(50) CHECK (
+    VALUE IN ('magasinier', 'responsable', 'livreur', 'technicien', 'gestionnaire', 'securite')
+);
 
 -- =============================
--- TABLES DE BASE
+-- ORGANISATION & UTILISATEURS
 -- =============================
 
 CREATE TABLE ORGANISATION (
@@ -127,7 +47,7 @@ CREATE TABLE ORGANISATION (
 CREATE TABLE ROLE (
     idRole dom_id PRIMARY KEY,
     libelle dom_type,
-    typeRole DOM_TYPE_ROLE
+    typeRole dom_type_role
 );
 
 CREATE TABLE INDIVIDU (
@@ -136,7 +56,7 @@ CREATE TABLE INDIVIDU (
     adresse dom_texte,
     telephone dom_telephone,
     email dom_email,
-	password dm_password
+	password TEXT
 );
 
 CREATE TABLE AFFECTER_ROLE (
@@ -153,7 +73,7 @@ CREATE TABLE AFFECTER_ROLE (
 );
 
 -- =============================
--- PRODUITS ET DÉRIVÉS
+-- PRODUITS
 -- =============================
 
 CREATE TABLE PRODUIT (
@@ -163,7 +83,7 @@ CREATE TABLE PRODUIT (
     description dom_texte,
     marque dom_type,
     modele dom_type,
-    type DOM_TYPE_PRODUIT,
+    type dom_type_produit,
     estMaterielEmballage dom_boolean
 );
 
@@ -186,7 +106,7 @@ CREATE TABLE PRODUIT_LOGICIEL (
 );
 
 -- =============================
--- FOURNISSEUR
+-- FOURNISSEUR & APPROVISIONNER
 -- =============================
 
 CREATE TABLE FOURNISSEUR (
@@ -204,8 +124,21 @@ CREATE TABLE APPROVISIONNER (
     FOREIGN KEY (idProduit) REFERENCES PRODUIT(idProduit)
 );
 
+CREATE TABLE DEMANDE_APPROVISIONNEMENT (
+    idDemande SERIAL PRIMARY KEY,
+    idOrganisation dom_id,
+    idProduit dom_id NOT NULL,
+    quantite dom_quantite NOT NULL CHECK (quantite > 0),
+    dateDemande TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    dateLivraisonPrevue dom_date NOT NULL,
+    statut dom_statut DEFAULT 'en_attente',
+
+    FOREIGN KEY (idOrganisation) REFERENCES FOURNISSEUR(idOrganisation),
+    FOREIGN KEY (idProduit) REFERENCES PRODUIT(idProduit)
+);
+
 -- =============================
--- ENTREPÔT ET STRUCTURES
+-- ENTREPÔT & CELLULES
 -- =============================
 
 CREATE TABLE ENTREPOT (
@@ -225,11 +158,12 @@ CREATE TABLE CELLULE (
     largeur dom_float,
     hauteur dom_float,
     masseMaximale dom_float,
-	capacite_max integer,
     volumeMaximal dom_float,
     statut dom_statut,
+    capacite_max dom_quantite,
     position dom_position
 );
+
 
 CREATE TABLE COMPOSER_ENTREPOT (
     idEntrepot dom_id,
@@ -240,20 +174,18 @@ CREATE TABLE COMPOSER_ENTREPOT (
 );
 
 -- =============================
--- LOTS ET COLIS
+-- LOTS & COLIS
 -- =============================
-
 
 CREATE TABLE LOT (
     idLot dom_id PRIMARY KEY,
-    idProduit dom_id NOT NULL,
     numeroLot dom_reference,
     quantiteInitiale dom_quantite,
     quantiteDisponible dom_quantite,
     dateProduction dom_date,
     dateExpiration dom_date,
     statut dom_type,
-    FOREIGN KEY (idProduit) REFERENCES Produit(idProduit)
+    idProduit dom_id REFERENCES PRODUIT(idProduit)
 );
 
 CREATE TABLE COLIS (
@@ -303,7 +235,7 @@ CREATE TABLE UTILISER_EMBALLAGE (
 );
 
 -- =============================
--- RÉCEPTION
+-- BON DE RÉCEPTION
 -- =============================
 
 CREATE TABLE BON_RECEPTION (
@@ -311,8 +243,10 @@ CREATE TABLE BON_RECEPTION (
     reference dom_reference,
     dateCreation dom_date,
     dateReceptionPrevue dom_date,
+    dateReceptionReelle dom_date, -- ajout nécessaire
     statut dom_statut
 );
+
 
 CREATE TABLE RECEVOIR_COLIS (
     idBon dom_id,
@@ -331,7 +265,7 @@ CREATE TABLE RESPONSABLE_RECEPTION (
 );
 
 -- =============================
--- EXPÉDITION
+-- BON D’EXPÉDITION
 -- =============================
 
 CREATE TABLE BON_EXPEDITION (
@@ -339,8 +273,9 @@ CREATE TABLE BON_EXPEDITION (
     reference dom_reference,
     dateCreation dom_date,
     dateExpeditionPrevue dom_date,
-    priorite dom_statut,
-    statut dom_statut
+    statut dom_statut DEFAULT 'en_attente',
+    priorite TEXT DEFAULT 'normal',
+    dateExpeditionReelle dom_date
 );
 
 CREATE TABLE EXPEDIER_COLIS (
@@ -357,6 +292,15 @@ CREATE TABLE RESPONSABLE_EXPEDITION (
     PRIMARY KEY (idIndividu, idBon),
     FOREIGN KEY (idIndividu) REFERENCES INDIVIDU(idIndividu),
     FOREIGN KEY (idBon) REFERENCES BON_EXPEDITION(idBon)
+);
+
+CREATE TABLE COMPOSER_EXPEDITION (
+    idBon dom_id,
+    idProduit dom_id,
+    quantite dom_quantite CHECK (quantite > 0),
+    PRIMARY KEY (idBon, idProduit),
+    FOREIGN KEY (idBon) REFERENCES BON_EXPEDITION(idBon) ON DELETE CASCADE,
+    FOREIGN KEY (idProduit) REFERENCES PRODUIT(idProduit)
 );
 
 -- =============================
@@ -389,12 +333,28 @@ CREATE TABLE GENERER_RAPPORT (
 CREATE TABLE INVENTAIRE (
     idProduit dom_id,
     idOrganisation dom_id,
-    quantiteDisponible dom_quantite,
     PRIMARY KEY (idProduit, idOrganisation),
     FOREIGN KEY (idProduit) REFERENCES PRODUIT(idProduit),
     FOREIGN KEY (idOrganisation) REFERENCES ORGANISATION(idOrganisation)
 );
 
--- =============================
--- FIN DU SCRIPT
--- =============================
+
+
+--Ajouter colunm password
+ALTER TABLE INDIVIDU
+ADD COLUMN password TEXT;
+
+-- Extension pour le cryptage
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- Ajouter colunm capacite_max
+ALTER TABLE CELLULE
+ADD COLUMN capacite_max dom_quantite;
+
+--Ajouter column dateReceptionRelle
+ALTER TABLE BON_RECEPTION
+ADD COLUMN dateReceptionReelle DATE;
+--auto increment id lot
+CREATE SEQUENCE IF NOT EXISTS lot_idlot_seq
+START WITH 100 INCREMENT BY 1 CACHE 10;
+ALTER TABLE LOT
+ALTER COLUMN idLot SET DEFAULT nextval('lot_idlot_seq');

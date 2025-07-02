@@ -1,190 +1,235 @@
 -- =============================================
--- SGE_req.sql
--- Routines pour les requêtes fréquentes
+-- SGE_imm.sql
+-- Interface Métier / IHM – Vues, Routines et Triggers
 -- =============================================
 
--- Obtenir l'inventaire d'un produit spécifique
-CREATE OR REPLACE FUNCTION obtenir_inventaire_produit(
-    p_id_produit INTEGER
-) RETURNS TABLE (
-    idProduit INTEGER,
-    reference VARCHAR(50),
-    nom VARCHAR(100),
-    quantite_disponible INTEGER,
-    emplacements TEXT
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        p.idProduit,
-        p.reference,
-        p.nom,
-        COALESCE(SUM(s.quantite), 0)::INTEGER AS quantite_disponible,
-        STRING_AGG(DISTINCT c.reference, ', ') AS emplacements
-    FROM PRODUIT p
-    LEFT JOIN LOT l ON p.idProduit = l.idProduit
-    LEFT JOIN STOCKER s ON l.idLot = s.idLot
-    LEFT JOIN CELLULE c ON s.idCellule = c.idCellule
-    WHERE p.idProduit = p_id_produit
-    GROUP BY p.idProduit, p.reference, p.nom;
-END;
-$$ LANGUAGE plpgsql;
+SET search_path TO public;
 
--- Trouver les produits en rupture de stock
-CREATE OR REPLACE FUNCTION produits_en_rupture()
-RETURNS TABLE (
-    idProduit INTEGER,
-    reference VARCHAR(50),
-    nom VARCHAR(100),
-    quantite_disponible INTEGER
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        p.idProduit,
-        p.reference,
-        p.nom,
-        COALESCE(SUM(i.quantiteDisponible), 0)::INTEGER AS quantite_disponible
-    FROM PRODUIT p
-    LEFT JOIN INVENTAIRE i ON p.idProduit = i.idProduit
-    GROUP BY p.idProduit, p.reference, p.nom
-    HAVING COALESCE(SUM(i.quantiteDisponible), 0) = 0;
-END;
-$$ LANGUAGE plpgsql;
+-- =======================
+-- VUES MÉTIER POUR L'IHM
+-- =======================
 
--- Lister les colis prêts pour l'expédition
-CREATE OR REPLACE FUNCTION colis_pret_expedition()
+-- Vue : Produits avec disponibilité et type
+CREATE OR REPLACE VIEW ihm_vue_produits_disponibles AS
+SELECT
+    p.idProduit,
+    p.reference,
+    p.nom,
+    p.type,
+    COALESCE(SUM(s.quantite), 0) AS quantiteDisponible,
+    p.estMaterielEmballage,
+    STRING_AGG(DISTINCT c.reference, ', ' ORDER BY c.reference) AS emplacements
+FROM 
+    PRODUIT p
+    LEFT JOIN LOT l ON l.idProduit = p.idProduit
+    LEFT JOIN STOCKER s ON s.idLot = l.idLot
+    LEFT JOIN CELLULE c ON c.idCellule = s.idCellule
+GROUP BY
+    p.idProduit, p.reference, p.nom, p.type, p.estMaterielEmballage;
+
+-- Vue : Colis prêts à être expédiés
+CREATE OR REPLACE VIEW ihm_vue_colis_prets AS
+SELECT
+    c.idColis,
+    c.reference,
+    c.dateCreation,
+    c.statut,
+    be.reference AS bonExpedition,
+    be.dateExpeditionPrevue,
+    COUNT(DISTINCT ct.idLot) AS nbLots,
+    COALESCE(SUM(ct.quantite), 0) AS quantiteTotale,
+    STRING_AGG(DISTINCT p.nom, ', ') AS produits
+FROM 
+    COLIS c
+    JOIN EXPEDIER_COLIS ec ON ec.idColis = c.idColis
+    JOIN BON_EXPEDITION be ON be.idBon = ec.idBon
+    LEFT JOIN CONTENIR ct ON ct.idColis = c.idColis
+    LEFT JOIN LOT l ON l.idLot = ct.idLot
+    LEFT JOIN PRODUIT p ON p.idProduit = l.idProduit
+WHERE 
+    c.statut = 'pret_a_expedier'
+GROUP BY
+    c.idColis, c.reference, c.dateCreation, c.statut, 
+    be.reference, be.dateExpeditionPrevue;
+
+-- Vue : Bons d'expédition en attente ou en cours
+CREATE OR REPLACE VIEW ihm_vue_bons_expedition AS
+SELECT
+    be.idBon,
+    be.reference,
+    be.dateCreation,
+    be.dateExpeditionPrevue,
+    be.priorite,
+    be.statut,
+    COUNT(DISTINCT ec.idColis) AS nbColis,
+    COALESCE(SUM(ct.quantite), 0) AS quantiteTotale,
+    STRING_AGG(DISTINCT p.nom, ', ') AS produits
+FROM 
+    BON_EXPEDITION be
+    LEFT JOIN EXPEDIER_COLIS ec ON ec.idBon = be.idBon
+    LEFT JOIN CONTENIR ct ON ct.idColis = ec.idColis
+    LEFT JOIN LOT l ON l.idLot = ct.idLot
+    LEFT JOIN PRODUIT p ON p.idProduit = l.idProduit
+GROUP BY
+    be.idBon, be.reference, be.dateCreation, 
+    be.dateExpeditionPrevue, be.priorite, be.statut;
+
+-- Vue : Mouvements récents (30 derniers jours)
+CREATE OR REPLACE VIEW ihm_vue_mouvements_recents AS
+SELECT
+    m.type,
+    m.date,
+    m.produit,
+    m.lot,
+    m.quantite,
+    m.cellule,
+    m.bon,
+    m.id_produit
+FROM (
+    SELECT
+        'Entrée'::TEXT AS type,
+        br.dateReceptionPrevue AS date,
+        p.nom AS produit,
+        l.numeroLot AS lot,
+        ct.quantite,
+        c.reference AS cellule,
+        br.reference AS bon,
+        p.idProduit AS id_produit
+    FROM 
+        BON_RECEPTION br
+        JOIN RECEVOIR_COLIS rc ON rc.idBon = br.idBon
+        JOIN COLIS co ON co.idColis = rc.idColis
+        JOIN CONTENIR ct ON ct.idColis = co.idColis
+        JOIN LOT l ON l.idLot = ct.idLot
+        JOIN PRODUIT p ON p.idProduit = l.idProduit
+        JOIN STOCKER s ON s.idLot = l.idLot
+        JOIN CELLULE c ON c.idCellule = s.idCellule
+    WHERE 
+        br.dateReceptionPrevue >= CURRENT_DATE - INTERVAL '30 days'
+    
+    UNION ALL
+    
+    SELECT
+        'Sortie'::TEXT AS type,
+        be.dateExpeditionPrevue AS date,
+        p.nom AS produit,
+        l.numeroLot AS lot,
+        -ct.quantite AS quantite,
+        c.reference AS cellule,
+        be.reference AS bon,
+        p.idProduit AS id_produit
+    FROM 
+        BON_EXPEDITION be
+        JOIN EXPEDIER_COLIS ec ON ec.idBon = be.idBon
+        JOIN COLIS co ON co.idColis = ec.idColis
+        JOIN CONTENIR ct ON ct.idColis = co.idColis
+        JOIN LOT l ON l.idLot = ct.idLot
+        JOIN PRODUIT p ON p.idProduit = l.idProduit
+        JOIN STOCKER s ON s.idLot = l.idLot
+        JOIN CELLULE c ON c.idCellule = s.idCellule
+    WHERE 
+        be.dateExpeditionPrevue >= CURRENT_DATE - INTERVAL '30 days'
+) m
+ORDER BY m.date DESC;
+
+-- =======================
+-- FONCTIONS LÉGÈRES POUR L'IHM
+-- =======================
+
+-- Obtenir le résumé d'un bon
+CREATE OR REPLACE FUNCTION ihm_get_bon_resume(p_id_bon INTEGER)
 RETURNS TABLE (
-    idColis INTEGER,
-    reference VARCHAR(50),
-    date_creation DATE,
-    bon_expedition VARCHAR(50),
-    date_expedition_prevue DATE,
-    nb_lots INTEGER,
-    quantite_totale INTEGER
+    idBon INTEGER,
+    reference TEXT,
+    statut TEXT,
+    priorite TEXT,
+    nbColis INTEGER,
+    quantiteTotale INTEGER,
+    produits TEXT
 ) AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
-        c.idColis,
-        c.reference,
-        c.dateCreation,
+    SELECT
+        be.idBon,
         be.reference,
-        be.dateExpeditionPrevue,
-        COUNT(ct.idLot)::INTEGER,
-        SUM(ct.quantite)::INTEGER
-    FROM COLIS c
-    JOIN EXPEDIER_COLIS ec ON c.idColis = ec.idColis
-    JOIN BON_EXPEDITION be ON ec.idBon = be.idBon
-    LEFT JOIN CONTENIR ct ON c.idColis = ct.idColis
-    WHERE c.statut = 'pret_a_expedier'
-    GROUP BY c.idColis, c.reference, c.dateCreation, be.reference, be.dateExpeditionPrevue;
+        be.statut,
+        be.priorite,
+        COUNT(DISTINCT ec.idColis),
+        COALESCE(SUM(ct.quantite), 0),
+        STRING_AGG(DISTINCT p.nom, ', ')
+    FROM 
+        BON_EXPEDITION be
+        LEFT JOIN EXPEDIER_COLIS ec ON be.idBon = ec.idBon
+        LEFT JOIN CONTENIR ct ON ec.idColis = ct.idColis
+        LEFT JOIN LOT l ON l.idLot = ct.idLot
+        LEFT JOIN PRODUIT p ON p.idProduit = l.idProduit
+    WHERE 
+        be.idBon = p_id_bon
+    GROUP BY 
+        be.idBon, be.reference, be.statut, be.priorite;
 END;
 $$ LANGUAGE plpgsql;
 
--- Trouver les produits expirant bientôt
-CREATE OR REPLACE FUNCTION produits_expirant_bientot(
-    p_jours_avant INTEGER
-) RETURNS TABLE (
-    idProduit INTEGER,
-    reference VARCHAR(50),
-    nom VARCHAR(100),
-    date_expiration DATE,
-    jours_restants INTEGER,
-    quantite_disponible INTEGER,
-    emplacement VARCHAR(50)
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        p.idProduit,
-        p.reference,
-        p.nom,
-        l.dateExpiration,
-        (l.dateExpiration - CURRENT_DATE)::INTEGER,
-        s.quantite,
-        c.reference
-    FROM PRODUIT p
-    JOIN LOT l ON p.idProduit = l.idProduit
-    JOIN STOCKER s ON l.idLot = s.idLot
-    JOIN CELLULE c ON s.idCellule = c.idCellule
-    WHERE l.dateExpiration IS NOT NULL
-    AND l.dateExpiration BETWEEN CURRENT_DATE AND (CURRENT_DATE + p_jours_avant * INTERVAL '1 day')
-    ORDER BY l.dateExpiration;
-END;
-$$ LANGUAGE plpgsql;
-
--- Calculer l'occupation des cellules
-CREATE OR REPLACE FUNCTION occupation_cellules()
+-- Produits d'un colis
+CREATE OR REPLACE FUNCTION ihm_get_colis_contenu(p_id_colis INTEGER)
 RETURNS TABLE (
-    idCellule INTEGER,
-    reference VARCHAR(50),
-    entrepot VARCHAR(100),
-    volume_utilise FLOAT,
-    volume_maximal FLOAT,
-    pourcentage_occupation FLOAT
+    idLot INTEGER,
+    lot TEXT,
+    produit TEXT,
+    idProduit INTEGER,
+    quantite INTEGER,
+    expiration DATE,
+    emplacement TEXT
 ) AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
-        c.idCellule,
-        c.reference,
-        e.nom,
-        COALESCE(SUM(p.volume * s.quantite), 0)::FLOAT,
-        c.volumeMaximal,
-        (COALESCE(SUM(p.volume * s.quantite), 0) / c.volumeMaximal * 100)::FLOAT
-    FROM CELLULE c
-    JOIN COMPOSER_ENTREPOT ce ON c.idCellule = ce.idCellule
-    JOIN ENTREPOT e ON ce.idEntrepot = e.idEntrepot
-    LEFT JOIN STOCKER s ON c.idCellule = s.idCellule
-    LEFT JOIN LOT l ON s.idLot = l.idLot
-    LEFT JOIN PRODUIT_MATERIEL p ON l.idProduit = p.idProduit
-    GROUP BY c.idCellule, c.reference, e.nom, c.volumeMaximal
-    ORDER BY e.nom, c.reference;
+    SELECT
+        l.idLot,
+        l.numeroLot,
+        p.nom,
+        p.idProduit,
+        ct.quantite,
+        l.dateExpiration,
+        c.reference
+    FROM 
+        CONTENIR ct
+        JOIN LOT l ON l.idLot = ct.idLot
+        JOIN PRODUIT p ON p.idProduit = l.idProduit
+        LEFT JOIN STOCKER s ON s.idLot = l.idLot
+        LEFT JOIN CELLULE c ON c.idCellule = s.idCellule
+    WHERE 
+        ct.idColis = p_id_colis;
 END;
 $$ LANGUAGE plpgsql;
--- Routine pour valider un bon de réception
-CREATE OR REPLACE FUNCTION valider_reception(
-    p_idBon INTEGER
-) RETURNS VOID AS $$
-BEGIN
-    -- Mettre à jour le statut du bon
-    UPDATE BON_RECEPTION
-    SET statut = 'termine'
-    WHERE idBon = p_idBon;
 
-    -- Mettre à jour les quantités de l'inventaire pour chaque produit reçu
-    UPDATE INVENTAIRE i
-    SET quantiteDisponible = quantiteDisponible + ct.quantite
-    FROM RECEVOIR_COLIS rc
-    JOIN COLIS c ON rc.idColis = c.idColis
-    JOIN CONTENIR ct ON c.idColis = ct.idColis
-    JOIN LOT l ON ct.idLot = l.idLot
-    WHERE rc.idBon = p_idBon
-      AND i.idProduit = l.idProduit;
-END;
-$$ LANGUAGE plpgsql;
--- Routine pour annuler un colis
-CREATE OR REPLACE FUNCTION annuler_colis(
-    p_idColis INTEGER
-) RETURNS VOID AS $$
-DECLARE
-    r RECORD;
-BEGIN
-    -- Réinjecter les quantités dans les lots
-    FOR r IN
-        SELECT idLot, quantite
-        FROM CONTENIR
-        WHERE idColis = p_idColis
-    LOOP
-        UPDATE LOT
-        SET quantiteDisponible = quantiteDisponible + r.quantite
-        WHERE idLot = r.idLot;
-    END LOOP;
+-- =======================
+-- TRIGGERS POUR L'IHM
+-- =======================
 
-    -- Mettre à jour le statut du colis
-    UPDATE COLIS
-    SET statut = 'annule'
-    WHERE idColis = p_idColis;
+-- Mise à jour auto du statut du bon de réception à "termine"
+CREATE OR REPLACE FUNCTION trg_update_statut_bon_reception()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM COLIS c 
+        JOIN RECEVOIR_COLIS rc ON rc.idColis = c.idColis 
+        WHERE rc.idBon = NEW.idBon AND c.statut != 'recu'
+    ) THEN
+        UPDATE BON_RECEPTION 
+        SET statut = 'termine', dateReceptionReelle = CURRENT_DATE
+        WHERE idBon = NEW.idBon;
+    END IF;
+    RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_auto_maj_bon_reception ON RECEVOIR_COLIS;
+CREATE TRIGGER trg_auto_maj_bon_reception
+AFTER INSERT OR UPDATE ON RECEVOIR_COLIS
+FOR EACH ROW
+EXECUTE FUNCTION trg_update_statut_bon_reception();
+
+-- =======================
+-- FIN DU SCRIPT
+-- =======================

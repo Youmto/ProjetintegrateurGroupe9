@@ -10,9 +10,10 @@ def search_products(conn, search_term=None, product_type=None):
         SELECT
             p.idProduit, p.reference, p.nom, p.description,
             p.marque, p.modele, p.type, p.estMaterielEmballage,
-            COALESCE(SUM(i.quantiteDisponible), 0)
+            COALESCE(SUM(s.quantite), 0) AS quantite_reelle
         FROM PRODUIT p
-        LEFT JOIN INVENTAIRE i ON p.idProduit = i.idProduit
+        LEFT JOIN LOT l ON l.idProduit = p.idProduit
+        LEFT JOIN STOCKER s ON s.idLot = l.idLot
         WHERE 1=1
         """
         params = []
@@ -25,17 +26,22 @@ def search_products(conn, search_term=None, product_type=None):
             query += " AND p.type = %s"
             params.append(product_type)
 
-        query += " GROUP BY p.idProduit, p.reference, p.nom, p.description, p.marque, p.modele, p.type, p.estMaterielEmballage"
+        query += """
+        GROUP BY p.idProduit, p.reference, p.nom, p.description,
+                 p.marque, p.modele, p.type, p.estMaterielEmballage
+        """
 
         rows = execute_query(conn, query, tuple(params), fetch=True)
         return [{
             'idProduit': r[0], 'reference': r[1], 'nom': r[2],
             'description': r[3], 'marque': r[4], 'modele': r[5],
-            'type': r[6], 'estMaterielEmballage': r[7], 'quantite_disponible': r[8]
+            'type': r[6], 'estMaterielEmballage': r[7],
+            'quantite_disponible': r[8]  
         } for r in rows]
     except Exception as e:
         logger.error(f"[search_products] Erreur : {e}")
         return []
+
 
 def get_product_details(conn, product_id):
     try:
@@ -188,15 +194,29 @@ def get_cellules_info(conn):
         "taux_occupation": r[11]
     } for r in rows]
 def get_entrepot_capacite_restante(conn, id_entrepot):
-    result = execute_query(conn, """
-        SELECT e.capaciteMaximale - COALESCE(SUM(c.capacite_max), 0)
-        FROM ENTREPOT e
-        LEFT JOIN COMPOSER_ENTREPOT ce ON e.idEntrepot = ce.idEntrepot
-        LEFT JOIN CELLULE c ON ce.idCellule = c.idCellule
-        WHERE e.idEntrepot = %s
-        GROUP BY e.capaciteMaximale
-    """, (id_entrepot,), fetch=True)
-    return result[0][0] if result else None
+    try:
+        result = execute_query(conn, """
+            SELECT 
+                e.capaciteMaximale - COALESCE(SUM(s.quantite), 0) AS capacite_restante
+            FROM ENTREPOT e
+            LEFT JOIN COMPOSER_ENTREPOT ce ON e.idEntrepot = ce.idEntrepot
+            LEFT JOIN CELLULE c ON ce.idCellule = c.idCellule
+            LEFT JOIN STOCKER s ON s.idCellule = c.idCellule
+            WHERE e.idEntrepot = %s
+            GROUP BY e.capaciteMaximale
+        """, (id_entrepot,), fetch=True)
+
+        return result[0][0] if result else None
+    except Exception as e:
+        logger.error(f"[get_entrepot_capacite_restante_reelle] Erreur : {e}")
+        return None
+
+
+        return result[0][0] if result else None
+    except Exception as e:
+        logger.error(f"[get_entrepot_capacite_restante_reelle] Erreur : {e}")
+        return None
+
 
 def deplacer_lot(conn, id_lot, id_cellule_source, id_cellule_destination, quantite, id_responsable):
     return execute_query(conn, "SELECT deplacer_lot(%s, %s, %s, %s, %s);", (id_lot, id_cellule_source, id_cellule_destination, quantite, id_responsable), fetch=True)[0][0]

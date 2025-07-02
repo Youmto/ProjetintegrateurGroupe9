@@ -25,6 +25,8 @@ from views.produits import ProduitsModule
 from views.cellules import CellulesModule
 from views.livreur_confirmation import LivreurConfirmationWindow
 from views.lot_detail import LotDetailWindow
+from views.approvisionnement import ApprovisionnementWindow
+
 
 # ➤ Suppression de: from views.alertes import AlertesModule
 
@@ -41,8 +43,8 @@ class MainWindow(QMainWindow):
         ProduitsModule: ('conn','user'),
         CellulesModule:('conn','user'),
         LivreurConfirmationWindow: ('conn', 'user'),
-        LotDetailWindow: ('conn', 'user')
-        
+        LotDetailWindow: ('conn', 'user'),
+        ApprovisionnementWindow: ('conn', 'user'),
     }
 
     def __init__(self, parent=None, db_conn=None, user=None):
@@ -125,6 +127,7 @@ class MainWindow(QMainWindow):
                 self._add_module("Mouvements", MouvementsModule)
                 self._add_module("Cellules", CellulesModule)
                 self._add_module("Lot Detail", LotDetailWindow)
+                self._add_module("Approvisionnement", ApprovisionnementWindow)
             
             if any('livreur' in r for r in roles):
                 logger.info("Chargement des modules Livreur")

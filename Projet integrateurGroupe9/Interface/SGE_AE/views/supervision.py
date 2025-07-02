@@ -10,6 +10,7 @@ from controllers.supervision_controller import (
     handle_produits_non_stockes, handle_cellules_vides,
     handle_expeditions_terminées
 )
+from controllers.approvisionnement_controller import  handle_demandes_approvisionnement 
 import csv
 from datetime import date
 
@@ -31,7 +32,8 @@ class SupervisionModule(QWidget):
             "Produits jamais stockés",
             "Ruptures de stock",
             "Cellules vides",
-            "Expéditions terminées"
+            "Expéditions terminées",
+            "Demandes d'approvisionnement" 
         ])
         layout.addWidget(QLabel("Sélection du rapport de supervision:"))
         layout.addWidget(self.select)
@@ -75,7 +77,11 @@ class SupervisionModule(QWidget):
                 "Produits jamais stockés": handle_produits_non_stockes,
                 "Ruptures de stock": handle_ruptures,
                 "Cellules vides": handle_cellules_vides,
-                "Expéditions terminées": handle_expeditions_terminées
+                "Expéditions terminées": handle_expeditions_terminées,
+              
+                "Demandes d'approvisionnement": handle_demandes_approvisionnement  # <- ajout ici
+
+
             }
 
             handler = controller_map.get(option)
