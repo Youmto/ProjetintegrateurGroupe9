@@ -70,6 +70,34 @@ BEGIN
     HAVING COALESCE(SUM(s.quantite), 0) = 0;
 END;
 $$;
+--- vue Mouvement 
+CREATE OR REPLACE VIEW MOUVEMENT AS
+SELECT
+    l.idProduit,
+    br.dateReceptionReelle AS date,
+    'ENTREE' AS type,
+    c.quantite
+FROM CONTENIR c
+JOIN COLIS col ON col.idColis = c.idColis
+JOIN RECEVOIR_COLIS rc ON rc.idColis = col.idColis
+JOIN BON_RECEPTION br ON br.idBon = rc.idBon
+JOIN LOT l ON l.idLot = c.idLot
+WHERE br.dateReceptionReelle IS NOT NULL
+
+UNION ALL
+
+SELECT
+    l.idProduit,
+    be.dateExpeditionReelle AS date,
+    'SORTIE' AS type,
+    c.quantite
+FROM CONTENIR c
+JOIN COLIS col ON col.idColis = c.idColis
+JOIN EXPEDIER_COLIS ec ON ec.idColis = col.idColis
+JOIN BON_EXPEDITION be ON be.idBon = ec.idBon
+JOIN LOT l ON l.idLot = c.idLot
+WHERE be.dateExpeditionReelle IS NOT NULL;
+
 
 --vue approvisionnement 
 DROP VIEW IF EXISTS vue_approvisionnement;
@@ -123,7 +151,7 @@ BEGIN
     JOIN STOCKER s ON s.idLot = l.idLot
     JOIN CELLULE c ON c.idCellule = s.idCellule
     WHERE l.dateExpiration IS NOT NULL
-    AND l.dateExpiration BETWEEN CURRENT_DATE AND CURRENT_DATE + p_jours_avant * INTERVAL '1 day'
+      AND l.dateExpiration BETWEEN CURRENT_DATE AND CURRENT_DATE + (p_jours_avant || ' days')::INTERVAL
     ORDER BY l.dateExpiration;
 END;
 $$;
@@ -131,12 +159,14 @@ $$;
 -- =============================================
 -- 4. Mouvements d’un produit (réception / expédition)
 -- =============================================
-CREATE OR REPLACE FUNCTION mouvements_produit(p_id_produit dom_id)
+DROP FUNCTION IF EXISTS mouvements_produit(dom_id);
+
+CREATE OR REPLACE FUNCTION mouvements_produit(p_id_produit INTEGER)
 RETURNS TABLE (
     type TEXT,
     reference_bon dom_reference,
     date dom_date,
-    quantite INTEGER, -- ❗ doit permettre les valeurs négatives
+    quantite INTEGER,
     lot dom_reference,
     cellule dom_reference,
     description TEXT
@@ -149,7 +179,7 @@ BEGIN
             'Entrée'::TEXT,
             br.reference,
             br.dateReceptionPrevue,
-            ct.quantite, -- OK, positive
+            ct.quantite,
             l.numeroLot,
             ce.reference,
             'Réception bon #' || br.reference
@@ -169,7 +199,7 @@ BEGIN
             'Sortie'::TEXT,
             be.reference,
             be.dateExpeditionPrevue,
-            -ct.quantite, -- ❗ NE PAS caster en dom_quantite
+            -ct.quantite,
             l.numeroLot,
             ce.reference,
             'Expédition bon #' || be.reference

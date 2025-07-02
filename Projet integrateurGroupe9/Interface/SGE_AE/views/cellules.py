@@ -70,6 +70,7 @@ class CellulesModule(QWidget):
 
     def load_data(self):
         try:
+            self.table.clearContents() 
             cellules = get_cellules_info(self.conn)
             self.table.setRowCount(len(cellules))
 
@@ -121,6 +122,8 @@ class CellulesModule(QWidget):
             update_cellule(self.conn, cell_id, l, L, h, masse, volume, cap, statut)
             QMessageBox.information(self, "Mise à jour", f"Cellule #{cell_id} modifiée.")
             self.load_data()
+            self.clear_form()
+
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Mise à jour échouée :\n{e}")
 

@@ -67,8 +67,9 @@ def mouvements_produit(conn, id_produit, date_debut=None, date_fin=None, type_mo
     et filtre en Python (car la fonction SQL n'accepte qu'un paramètre).
     """
     try:
-        query = "SELECT * FROM mouvements_produit(%s::dom_id);"
+        query = "SELECT * FROM mouvements_produit(%s);"
         rows = execute_query(conn, query, (id_produit,), fetch=True)
+
 
         mouvements = [
             dict(zip(

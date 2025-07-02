@@ -120,38 +120,6 @@ LEFT JOIN RECEVOIR_COLIS rc ON c.idColis = rc.idColis
 LEFT JOIN BON_RECEPTION br ON rc.idBon = br.idBon
 GROUP BY c.idColis, c.reference, c.dateCreation, c.statut, be.reference, br.reference;
 
--- Vue produits expirant bientot
-CREATE OR REPLACE FUNCTION produits_expirant_bientot(p_jours_avant INTEGER)
-RETURNS TABLE (
-    idProduit dom_id,
-    reference dom_reference,
-    nom dom_nom,
-    date_expiration DATE,
-    jours_restants INTEGER,
-    quantite_disponible INTEGER,
-    emplacement dom_reference
-)
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    RETURN QUERY
-    SELECT
-        p.idProduit,
-        p.reference,
-        p.nom,
-        l.dateExpiration::DATE,
-        (l.dateExpiration - CURRENT_DATE)::INTEGER,
-        COALESCE(s.quantite, 0),
-        c.reference
-    FROM PRODUIT p
-    JOIN LOT l ON l.idProduit = p.idProduit
-    JOIN STOCKER s ON s.idLot = l.idLot
-    JOIN CELLULE c ON c.idCellule = s.idCellule
-    WHERE l.dateExpiration IS NOT NULL
-    AND l.dateExpiration BETWEEN CURRENT_DATE AND CURRENT_DATE + p_jours_avant * INTERVAL '1 day'
-    ORDER BY l.dateExpiration;
-END;
-$$;
 -- Vue mouvements de produits
 CREATE OR REPLACE FUNCTION mouvements_produit(p_idProduit INTEGER)
 RETURNS TABLE(

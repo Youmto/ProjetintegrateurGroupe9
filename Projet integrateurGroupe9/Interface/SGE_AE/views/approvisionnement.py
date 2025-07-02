@@ -104,7 +104,10 @@ class ApprovisionnementWindow(QWidget):
             QMessageBox.information(
                 self, "Succès", "Les approvisionnements ont été enregistrés avec succès."
             )
-            self.close()
+            self.charger_table()
+            self.table.scrollToTop()
+
+
         else:
             QMessageBox.information(
                 self, "Aucun approvisionnement",

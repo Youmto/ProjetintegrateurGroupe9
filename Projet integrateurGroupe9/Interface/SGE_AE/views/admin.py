@@ -124,6 +124,7 @@ class AdminModule(QWidget):
             if success:
                 QMessageBox.information(self, "Succès", f"Rôle attribué à {user['nom']}")
                 self.refresh_roles()
+                self.load_data()  # Recharger les données pour mettre à jour la liste   
             else:
                 QMessageBox.information(self, "Déjà attribué", "Ce rôle est déjà actif.")
         except Exception as e:
@@ -141,6 +142,7 @@ class AdminModule(QWidget):
             if success:
                 QMessageBox.information(self, "Succès", f"Rôle révoqué pour {user['nom']}")
                 self.refresh_roles()
+                self.load_data()    # Recharger les données pour mettre à jour la liste
             else:
                 QMessageBox.information(self, "Non attribué", "Ce rôle n'était pas actif.")
         except Exception as e:
