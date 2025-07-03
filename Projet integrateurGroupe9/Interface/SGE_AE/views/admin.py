@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QComboBox, QListWidget, QMessageBox
 )
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
 import logging
 from controllers.user_controller import (
     get_all_users,
@@ -12,6 +13,7 @@ from controllers.user_controller import (
     deactivate_user_role,
     get_roles_for_user
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,35 +32,86 @@ class AdminModule(QWidget):
     def setup_ui(self):
         layout = QVBoxLayout()
 
-        layout.addWidget(QLabel("Utilisateurs"))
+        # Titre principal avec emoji et style
+        title = QLabel("👥 Gestion des utilisateurs et rôles")
+        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title.setStyleSheet("color: #2E86C1; margin-bottom: 15px;")
+        layout.addWidget(title)
+
+        # Label utilisateurs + liste
+        layout.addWidget(QLabel("👤 Liste des utilisateurs :"))
         self.user_list = QListWidget()
         self.user_list.itemSelectionChanged.connect(self.refresh_roles)
+        self.user_list.setStyleSheet("""
+            QListWidget {
+                background-color: #F0F3F4;
+                border: 1px solid #D5DBDB;
+                font-size: 14px;
+            }
+            QListWidget::item:selected {
+                background-color: #3498DB;
+                color: white;
+            }
+        """)
         layout.addWidget(self.user_list)
 
-        layout.addWidget(QLabel("Rôle à attribuer/retirer"))
+        # Label rôle + combo
+        layout.addWidget(QLabel("🎭 Rôle à attribuer/retirer :"))
         self.role_combo = QComboBox()
+        self.role_combo.setStyleSheet("padding: 5px; font-size: 14px;")
         layout.addWidget(self.role_combo)
 
-        layout.addWidget(QLabel("Organisation"))
+        # Label organisation + combo
+        layout.addWidget(QLabel("🏢 Organisation :"))
         self.org_combo = QComboBox()
+        self.org_combo.setStyleSheet("padding: 5px; font-size: 14px;")
         layout.addWidget(self.org_combo)
 
-        self.current_roles_label = QLabel("Rôles actuels : Aucun utilisateur sélectionné")
+        # Label rôles actuels
+        self.current_roles_label = QLabel("ℹ️ Rôles actuels : Aucun utilisateur sélectionné")
         self.current_roles_label.setWordWrap(True)
+        self.current_roles_label.setStyleSheet("font-style: italic; color: #7F8C8D; margin: 10px 0;")
         layout.addWidget(self.current_roles_label)
 
+        # Boutons Attribuer et Révoquer
         btn_layout = QHBoxLayout()
-        assign_btn = QPushButton("Attribuer")
+
+        assign_btn = QPushButton("✅ Attribuer")
+        assign_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #28B463;
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #239B56;
+            }
+        """)
         assign_btn.clicked.connect(self.assign_role)
         btn_layout.addWidget(assign_btn)
 
-        revoke_btn = QPushButton("Révoquer")
+        revoke_btn = QPushButton("❌ Révoquer")
+        revoke_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #CB4335;
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #922B21;
+            }
+        """)
         revoke_btn.clicked.connect(self.revoke_role)
         btn_layout.addWidget(revoke_btn)
 
         layout.addLayout(btn_layout)
         self.setLayout(layout)
 
+    # Le reste du code inchangé
     def load_data(self):
         try:
             self.users = get_all_users(self.conn)
@@ -124,7 +177,7 @@ class AdminModule(QWidget):
             if success:
                 QMessageBox.information(self, "Succès", f"Rôle attribué à {user['nom']}")
                 self.refresh_roles()
-                self.load_data()  # Recharger les données pour mettre à jour la liste   
+                self.load_data()
             else:
                 QMessageBox.information(self, "Déjà attribué", "Ce rôle est déjà actif.")
         except Exception as e:
@@ -142,7 +195,7 @@ class AdminModule(QWidget):
             if success:
                 QMessageBox.information(self, "Succès", f"Rôle révoqué pour {user['nom']}")
                 self.refresh_roles()
-                self.load_data()    # Recharger les données pour mettre à jour la liste
+                self.load_data()
             else:
                 QMessageBox.information(self, "Non attribué", "Ce rôle n'était pas actif.")
         except Exception as e:

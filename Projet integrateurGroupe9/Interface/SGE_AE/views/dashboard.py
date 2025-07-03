@@ -2,15 +2,18 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout,
     QGroupBox, QTableWidget, QTableWidgetItem, QComboBox,
     QPushButton, QDateEdit, QGridLayout, QSizePolicy, QFrame,
-    QScrollArea, QApplication, QProgressBar
+    QScrollArea, QApplication, QProgressBar, QSpacerItem,
+    QMessageBox  # <-- Ajoute ceci
 )
-from PyQt5.QtCore import Qt, QTimer, QDate, QThread, pyqtSignal
-from PyQt5.QtGui import QFont, QColor, QPalette
+from PyQt5.QtCore import Qt, QTimer, QDate, QThread, pyqtSignal, QThreadPool
+from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import logging
-import concurrent.futures # Pour le pool de threads
+import concurrent.futures
+import sys
+import csv
 
 from models.product_model import get_all_products
 from controllers.dashboard_controller import (
@@ -27,11 +30,10 @@ from controllers.dashboard_controller import (
 
 logger = logging.getLogger(__name__)
 
-# --- Threading pour la récupération des données ---
 class DataFetcher(QThread):
-    data_fetched = pyqtSignal(str, object) # Signal pour émettre les données récupérées
-    error_occurred = pyqtSignal(str, str) # Signal pour les erreurs
-    progress_update = pyqtSignal(int) # Signal pour la progression
+    data_fetched = pyqtSignal(str, object)
+    error_occurred = pyqtSignal(str, str)
+    progress_update = pyqtSignal(int)
 
     def __init__(self, conn, method_name, *args, **kwargs):
         super().__init__()
@@ -43,7 +45,7 @@ class DataFetcher(QThread):
     def run(self):
         try:
             self.progress_update.emit(0)
-            # Simuler le travail pour les mises à jour de progression si nécessaire, ex: time.sleep()
+            
             if self.method_name == "occupation_cellules":
                 data = handle_occupation_cellules(self.conn)
             elif self.method_name == "ruptures":
@@ -74,224 +76,451 @@ class DataFetcher(QThread):
             self.error_occurred.emit(self.method_name, str(e))
             self.progress_update.emit(100)
 
-
 class DashboardModule(QWidget):
     def __init__(self, conn, user):
         super().__init__()
         self.conn = conn
         self.user = user
-        self.setWindowTitle("Tableau de Bord - Vue d'ensemble")
+        self.setWindowTitle("Tableau de Bord - Gestion d'Entrepôt")
+        self.setWindowIcon(QIcon(':/icons/dashboard.png'))
         
-        self.setup_styles() # Appliquer le style professionnel
-        self.layout = QVBoxLayout(self)
-        self.setLayout(self.layout)
-
-        self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=5) # Gérer les threads
-
+        # Paramètres de fenêtre
+        self.setMinimumSize(1200, 800)
+        
+        self.setup_styles()
         self.init_ui()
-        self.start_refresh_timer() # Démarrer le minuteur pour l'actualisation périodique
+        self.start_refresh_timer()
 
     def setup_styles(self):
-        # Palette de couleurs professionnelle
-        self.setAutoFillBackground(True)
+        # Palette de couleurs moderne
         palette = self.palette()
-        palette.setColor(QPalette.Window, QColor("#F0F2F5")) # Arrière-plan gris clair
-        palette.setColor(QPalette.WindowText, QColor("#333333")) # Texte gris foncé
-        palette.setColor(QPalette.Base, QColor("#FFFFFF")) # Blanc pour les champs de saisie/tables
-        palette.setColor(QPalette.AlternateBase, QColor("#E0E6ED")) # Légèrement plus foncé pour les lignes alternées
-        palette.setColor(QPalette.ToolTipBase, QColor("#FFFFFF"))
-        palette.setColor(QPalette.ToolTipText, QColor("#333333"))
-        palette.setColor(QPalette.Text, QColor("#333333"))
-        palette.setColor(QPalette.Button, QColor("#007BFF")) # Bleu pour les boutons
-        palette.setColor(QPalette.ButtonText, QColor("#FFFFFF")) # Texte blanc sur les boutons
-        palette.setColor(QPalette.Highlight, QColor("#0056b3")) # Bleu plus foncé pour la surbrillance
-        palette.setColor(QPalette.HighlightedText, QColor("#FFFFFF"))
+        palette.setColor(QPalette.Window, QColor("#f5f7fa"))
+        palette.setColor(QPalette.WindowText, QColor("#2d3748"))
+        palette.setColor(QPalette.Base, QColor("#ffffff"))
+        palette.setColor(QPalette.AlternateBase, QColor("#edf2f7"))
+        palette.setColor(QPalette.ToolTipBase, QColor("#ffffff"))
+        palette.setColor(QPalette.ToolTipText, QColor("#2d3748"))
+        palette.setColor(QPalette.Text, QColor("#2d3748"))
+        palette.setColor(QPalette.Button, QColor("#4299e1"))
+        palette.setColor(QPalette.ButtonText, QColor("#ffffff"))
+        palette.setColor(QPalette.Highlight, QColor("#3182ce"))
+        palette.setColor(QPalette.HighlightedText, QColor("#ffffff"))
         self.setPalette(palette)
 
-        # Paramètres de police globaux
-        font = QFont("Segoe UI", 10) # Police moderne et propre
-        self.setFont(font)
-
-        # Style de widget spécifique avec QSS
+        # Style global avec QSS
         self.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #0056b3; /* Bleu plus foncé pour les titres de groupe de boîtes */
-                border: 1px solid #C0C5CC;
-                border-radius: 5px;
-                margin-top: 1ex; /* Espace pour le titre */
-                padding: 10px;
+            QWidget {
+                font-family: 'Segoe UI', Arial, sans-serif;
             }
+            
+            QGroupBox {
+                font-size: 14px;
+                font-weight: 600;
+                color: #2d3748;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                margin-top: 1.5ex;
+                padding: 12px;
+                background-color: white;
+            }
+            
             QGroupBox::title {
                 subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 0 3px;
-                color: #0056b3;
+                left: 12px;
+                padding: 0 6px;
             }
+            
             QLabel#header_label {
-                font-size: 18px;
-                font-weight: bold;
-                color: #2C3E50; /* Bleu/gris encore plus foncé pour l'en-tête */
-                padding-bottom: 10px;
+                font-size: 22px;
+                font-weight: 600;
+                color: #2d3748;
+                padding: 8px 0;
             }
+            
             QLabel#summary_label {
-                font-size: 14px;
-                font-weight: bold;
-                color: #555555;
-                margin-bottom: 15px;
+                font-size: 15px;
+                color: #4a5568;
+                margin-bottom: 16px;
             }
+            
             QTableWidget {
-                border: 1px solid #C0C5CC;
-                gridline-color: #D3D8DF;
-                background-color: #FFFFFF;
-                selection-background-color: #AACCFF;
-                alternate-background-color: #F8F9FA;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                gridline-color: #e2e8f0;
+                background-color: white;
+                selection-background-color: #bee3f8;
+                alternate-background-color: #f8fafc;
             }
+            
             QTableWidget::item {
-                padding: 5px;
+                padding: 8px;
             }
+            
             QTableWidget::horizontalHeader {
-                background-color: #007BFF;
-                color: #FFFFFF;
-                font-weight: bold;
-                padding: 5px;
+                background-color: #4299e1;
+                color: white;
+                font-weight: 600;
+                padding: 8px;
+                border-radius: 0;
             }
-            QTableWidget::verticalHeader {
-                background-color: #F0F2F5;
-            }
+            
             QPushButton {
-                background-color: #007BFF;
+                background-color: #4299e1;
                 color: white;
                 border: none;
-                padding: 8px 15px;
-                border-radius: 4px;
-                font-weight: bold;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-weight: 500;
+                min-width: 100px;
             }
+            
             QPushButton:hover {
-                background-color: #0056b3;
+                background-color: #3182ce;
             }
+            
+            QPushButton:pressed {
+                background-color: #2b6cb0;
+            }
+            
             QComboBox, QDateEdit {
-                border: 1px solid #C0C5CC;
-                border-radius: 3px;
-                padding: 5px;
-                background-color: #FFFFFF;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                padding: 6px;
+                min-height: 28px;
+                background-color: white;
             }
-            QFrame { /* Pour les icônes colorées */
-                border-radius: 5px;
+            
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 20px;
+                border-left: 1px solid #e2e8f0;
             }
+            
             QProgressBar {
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
                 text-align: center;
-                color: #FFFFFF;
-                background-color: #E0E6ED;
+                color: white;
+                background-color: #edf2f7;
+                height: 20px;
+            }
+            
+            QProgressBar::chunk {
+                background-color: #48bb78;
                 border-radius: 5px;
             }
-            QProgressBar::chunk {
-                background-color: #4CAF50; /* Vert pour la progression */
-                border-radius: 5px;
+            
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            
+            .critical-indicator {
+                background-color: #f56565;
+                border-radius: 4px;
+                padding: 2px 6px;
+                color: white;
+                font-weight: 600;
+            }
+            
+            .warning-indicator {
+                background-color: #ed8936;
+                border-radius: 4px;
+                padding: 2px 6px;
+                color: white;
+                font-weight: 600;
+            }
+            
+            .success-indicator {
+                background-color: #48bb78;
+                border-radius: 4px;
+                padding: 2px 6px;
+                color: white;
+                font-weight: 600;
             }
         """)
 
     def init_ui(self):
-        # En-tête principal
-        self.label_header = QLabel(f"Bienvenue {self.user.get('nom', '')} - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-        self.label_header.setObjectName("header_label")
-        self.layout.addWidget(self.label_header, alignment=Qt.AlignCenter)
+        # Layout principal
+        self.main_layout = QVBoxLayout()
+        self.main_layout.setContentsMargins(20, 20, 20, 20)
+        self.main_layout.setSpacing(20)
+        self.setLayout(self.main_layout)
 
-        # Statistiques récapitulatives
+        # En-tête
+        self.init_header()
+        
+        # Barre de progression
+        self.init_progress_bar()
+        
+        # Contenu principal avec scroll
+        self.init_scroll_area()
+        
+        # Chargement initial des données
+        self.refresh_data()
+
+    def init_header(self):
+        header_widget = QWidget()
+        header_layout = QVBoxLayout()
+        header_widget.setLayout(header_layout)
+        
+        # Titre principal
+        self.header_label = QLabel(f"Tableau de Bord - Bienvenue, {self.user.get('nom', 'Utilisateur')}")
+        self.header_label.setObjectName("header_label")
+        
+        # Sous-titre avec date
+        self.subheader_label = QLabel(datetime.now().strftime("%A %d %B %Y - %H:%M"))
+        self.subheader_label.setStyleSheet("color: #718096; font-size: 14px;")
+        
+        # Statistiques sommaires
         self.stats_summary = QLabel()
         self.stats_summary.setObjectName("summary_label")
-        self.layout.addWidget(self.stats_summary, alignment=Qt.AlignCenter)
+        
+        header_layout.addWidget(self.header_label)
+        header_layout.addWidget(self.subheader_label)
+        header_layout.addWidget(self.stats_summary)
+        
+        self.main_layout.addWidget(header_widget)
 
-        # Barre de progression pour le chargement
+    def init_progress_bar(self):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        self.progress_bar.hide() # Cacher jusqu'à ce que le chargement commence
-        self.layout.addWidget(self.progress_bar)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.hide()
+        self.main_layout.addWidget(self.progress_bar)
 
-        # Zone de défilement pour le contenu principal
-        self.scroll_area = QScrollArea(self)
+    def init_scroll_area(self):
+        self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_content_widget = QWidget()
-        self.scroll_content_layout = QVBoxLayout(self.scroll_content_widget)
-        self.scroll_area.setWidget(self.scroll_content_widget)
-        self.layout.addWidget(self.scroll_area)
-
-        # Section graphique
-        self.graph_group = QGroupBox("Indicateurs Clés & Graphiques")
-        self.graph_layout = QGridLayout()
-        self.graph_group.setLayout(self.graph_layout)
-        self.scroll_content_layout.addWidget(self.graph_group)
-
-        # Graphique d'occupation des cellules
-        self.occupation_figure = plt.figure(figsize=(6, 3))
-        self.occupation_canvas = FigureCanvas(self.occupation_figure)
-        self.graph_layout.addWidget(QLabel("Taux de remplissage global"), 0, 0, alignment=Qt.AlignCenter)
-        self.graph_layout.addWidget(self.occupation_canvas, 1, 0)
+        self.scroll_area.setFrameShape(QScrollArea.NoFrame)
         
-        # Graphique de l'historique des ruptures
-        self.rupture_history_figure = plt.figure(figsize=(6, 3))
-        self.rupture_history_canvas = FigureCanvas(self.rupture_history_figure)
-        self.graph_layout.addWidget(QLabel("Historique des ruptures"), 0, 1, alignment=Qt.AlignCenter)
-        self.graph_layout.addWidget(self.rupture_history_canvas, 1, 1)
-
+        self.scroll_content = QWidget()
+        self.scroll_layout = QVBoxLayout()
+        self.scroll_layout.setContentsMargins(0, 0, 0, 0)
+        self.scroll_layout.setSpacing(20)
+        self.scroll_content.setLayout(self.scroll_layout)
+        
+        # Section des indicateurs visuels
+        self.init_visual_indicators()
+        
         # Section des tableaux
-        self.tables = {}
-        self.data_grid = QGridLayout()
+        self.init_data_tables()
         
+        # Section des mouvements
+        self.init_movements_section()
+        
+        # Ajouter un espace flexible à la fin
+        self.scroll_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        
+        self.scroll_area.setWidget(self.scroll_content)
+        self.main_layout.addWidget(self.scroll_area)
+
+    def init_visual_indicators(self):
+        # Conteneur pour les indicateurs visuels
+        indicators_container = QWidget()
+        indicators_layout = QVBoxLayout()
+        indicators_container.setLayout(indicators_layout)
+        
+        # Titre de section
+        section_title = QLabel("Indicateurs Clés")
+        section_title.setStyleSheet("font-size: 16px; font-weight: 600; color: #2d3748;")
+        indicators_layout.addWidget(section_title)
+        
+        # Grille pour les graphiques
+        graphs_grid = QGridLayout()
+        graphs_grid.setSpacing(15)
+        
+        # Graphique d'occupation
+        self.occupation_figure = plt.figure(figsize=(8, 4))
+        self.occupation_canvas = FigureCanvas(self.occupation_figure)
+        graphs_grid.addWidget(self.occupation_canvas, 0, 0)
+        
+        # Graphique historique des ruptures
+        self.rupture_history_figure = plt.figure(figsize=(8, 4))
+        self.rupture_history_canvas = FigureCanvas(self.rupture_history_figure)
+        graphs_grid.addWidget(self.rupture_history_canvas, 0, 1)
+        
+        indicators_layout.addLayout(graphs_grid)
+        self.scroll_layout.addWidget(indicators_container)
+
+    def init_data_tables(self):
+        # Conteneur pour les tableaux
+        tables_container = QWidget()
+        tables_layout = QVBoxLayout()
+        tables_container.setLayout(tables_layout)
+        
+        # Titre de section
+        section_title = QLabel("Statistiques d'Entrepôt")
+        section_title.setStyleSheet("font-size: 16px; font-weight: 600; color: #2d3748;")
+        tables_layout.addWidget(section_title)
+        
+        # Grille pour les tableaux
+        tables_grid = QGridLayout()
+        tables_grid.setSpacing(15)
+        
+        # Tableaux avec indicateurs visuels
+        self.tables = {}
         self.add_table("Produits en rupture", 0, 0, critical=True)
         self.add_table("Produits jamais stockés", 0, 1)
         self.add_table("Cellules vides", 1, 0)
         self.add_table("Produits expirant bientôt", 1, 1, warning=True)
         self.add_table("Demandes d'approvisionnement", 2, 0)
         self.add_table("Expéditions terminées", 2, 1)
+        
+        tables_layout.addLayout(tables_grid)
+        self.scroll_layout.addWidget(tables_container)
 
-        self.scroll_content_layout.addLayout(self.data_grid)
-
-        self.init_mouvements_section()
-
-        # Chargement initial des données
-        self.refresh_data()
+    def init_movements_section(self):
+        self.movements_container = QGroupBox("Historique des Mouvements")
+        movements_layout = QVBoxLayout()
+        self.movements_container.setLayout(movements_layout)
+        
+        # Barre de filtres
+        filters_layout = QHBoxLayout()
+        filters_layout.setSpacing(10)
+        
+        # Sélecteur de produit
+        self.product_combo = QComboBox()
+        self.product_combo.setPlaceholderText("Sélectionner un produit")
+        self.product_combo.setMinimumWidth(200)
+        
+        # Sélecteurs de date
+        self.date_start = QDateEdit(calendarPopup=True)
+        self.date_start.setDisplayFormat("dd/MM/yyyy")
+        self.date_start.setDate(QDate.currentDate().addMonths(-1))
+        
+        self.date_end = QDateEdit(calendarPopup=True)
+        self.date_end.setDisplayFormat("dd/MM/yyyy")
+        self.date_end.setDate(QDate.currentDate())
+        
+        # Sélecteur de type
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(["Tous types", "Entrée", "Sortie"])
+        
+        # Bouton de rafraîchissement
+        refresh_btn = QPushButton("Actualiser")
+        refresh_btn.setIcon(QIcon.fromTheme("view-refresh"))
+        refresh_btn.clicked.connect(self.refresh_mouvements)
+        
+        # Ajout des widgets au layout
+        filters_layout.addWidget(QLabel("Produit:"))
+        filters_layout.addWidget(self.product_combo)
+        filters_layout.addWidget(QLabel("Du:"))
+        filters_layout.addWidget(self.date_start)
+        filters_layout.addWidget(QLabel("Au:"))
+        filters_layout.addWidget(self.date_end)
+        filters_layout.addWidget(QLabel("Type:"))
+        filters_layout.addWidget(self.type_combo)
+        filters_layout.addWidget(refresh_btn)
+        filters_layout.addStretch()
+        
+        movements_layout.addLayout(filters_layout)
+        
+        # Tableau des mouvements
+        self.movements_table = QTableWidget()
+        self.movements_table.setColumnCount(7)
+        self.movements_table.setHorizontalHeaderLabels([
+            "Type", "Référence", "Date", "Quantité", "N° Lot", "Cellule", "Commentaire"
+        ])
+        self.movements_table.setSortingEnabled(True)
+        self.movements_table.verticalHeader().setVisible(False)
+        movements_layout.addWidget(self.movements_table)
+        
+        self.scroll_layout.addWidget(self.movements_container)
+        
+        # Charger les produits
+        self.load_products()
 
     def add_table(self, title, row, col, critical=False, warning=False):
-        box = QGroupBox()
-        vbox = QVBoxLayout()
-        box.setLayout(vbox)
-        box.setTitle(title) # Définir le titre pour QGroupBox
+        container = QGroupBox(title)
+        layout = QVBoxLayout()
+        container.setLayout(layout)
 
-        header_layout = QHBoxLayout()
-        icon = QLabel()
-        icon.setFixedSize(10, 10) # Icône carrée
-        icon.setStyleSheet("background-color: green; border-radius: 5px;")
-        icon.setObjectName(f"icon_{title.replace(' ', '_').lower()}") # Nom d'objet unique pour le style
-        header_layout.addWidget(icon)
-        header_layout.addStretch(1) # Pousser l'icône vers la gauche
+        # Indicateur de statut
+        status_indicator = QLabel()
+        status_indicator.setAlignment(Qt.AlignRight)
+        status_indicator.setFixedHeight(20)
+        layout.addWidget(status_indicator)
 
-        # Pas besoin d'un QLabel séparé pour le titre à l'intérieur de la boîte si le titre de QGroupBox est utilisé
-
+        # Tableau
         table = QTableWidget()
-        table.setColumnCount(3) # Par défaut, sera ajusté par update_table
+        table.setColumnCount(3)
+        table.verticalHeader().setVisible(False)
         table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        table.setEditTriggers(QTableWidget.NoEditTriggers) # Rendre les tables en lecture seule
-        table.setAlternatingRowColors(True) # Améliorer la lisibilité
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        layout.addWidget(table)
 
-        vbox.addLayout(header_layout) # Ajouter l'icône en haut
-        vbox.addWidget(table)
+        # Bouton Export CSV
+        export_btn = QPushButton("Exporter CSV")
+        export_btn.clicked.connect(lambda: self.export_table_to_csv(title))
+        layout.addWidget(export_btn)
 
-        self.tables[title] = table
-        self.data_grid.addWidget(box, row, col)
+        # Stocker la référence
+        self.tables[title] = {
+            "widget": container,
+            "table": table,
+            "status": status_indicator
+        }
+
+        # Style selon le type
+        if critical:
+            container.setStyleSheet("QGroupBox { border-left: 4px solid #f56565; }")
+        elif warning:
+            container.setStyleSheet("QGroupBox { border-left: 4px solid #ed8936; }")
+        else:
+            container.setStyleSheet("QGroupBox { border-left: 4px solid #4299e1; }")
+
+    def export_table_to_csv(self, title):
+        """Exporte le tableau donné en CSV (sans ui_utils)"""
+        table_info = self.tables.get(title)
+        if not table_info:
+            return
+        table = table_info["table"]
+        data = []
+        for row in range(table.rowCount()):
+            row_data = {}
+            for col in range(table.columnCount()):
+                header_item = table.horizontalHeaderItem(col)
+                header = header_item.text() if header_item else f"Colonne {col+1}"
+                item = table.item(row, col)
+                row_data[header] = item.text() if item else ""
+            data.append(row_data)
+        if not data:
+            QMessageBox.warning(self, "Export", "Aucune donnée à exporter")
+            return
+
+        from PyQt5.QtWidgets import QFileDialog
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exporter en CSV",
+            f"{title.replace(' ', '_').lower()}_{date.today().strftime('%Y%m%d')}.csv",
+            "Fichiers CSV (*.csv);;Tous les fichiers (*)"
+        )
+        if file_path:
+            try:
+                with open(file_path, mode='w', newline='', encoding='utf-8') as file:
+                    writer = csv.DictWriter(file, fieldnames=data[0].keys(), delimiter=';')
+                    writer.writeheader()
+                    writer.writerows(data)
+                QMessageBox.information(self, "Export", "Exportation réussie !")
+            except Exception as e:
+                QMessageBox.warning(self, "Export", f"Erreur lors de l'export : {e}")
 
     def start_refresh_timer(self):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh_data)
-        self.timer.start(5 * 60 * 1000)  # Toutes les 5 minutes
+        self.timer.start(300000)  # 5 minutes
 
     def refresh_data(self):
         self.progress_bar.show()
         self.progress_bar.setValue(0)
-        self.label_header.setText(f"Bienvenue {self.user.get('nom', '')} - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-
-        # Utiliser un pool de threads pour la récupération concurrente des données
+        
+        # Mettre à jour l'heure dans l'en-tête
+        self.subheader_label.setText(datetime.now().strftime("%A %d %B %Y - %H:%M"))
+        
+        # Charger les données
         self.fetch_data_in_thread("occupation_cellules")
         self.fetch_data_in_thread("ruptures", "Produits en rupture")
         self.fetch_data_in_thread("produits_non_stockes", "Produits jamais stockés")
@@ -300,29 +529,22 @@ class DashboardModule(QWidget):
         self.fetch_data_in_thread("demandes_approvisionnement", "Demandes d'approvisionnement")
         self.fetch_data_in_thread("expeditions_terminées", "Expéditions terminées")
         
-        # Récupérer les données pour le graphique de l'historique des ruptures (ex: les 6 derniers mois)
+        # Historique des ruptures (6 derniers mois)
         end_date = QDate.currentDate().toPyDate()
         start_date = (QDate.currentDate().addMonths(-6)).toPyDate()
         self.fetch_data_in_thread("ruptures_history", start_date, end_date)
-
-        self.load_produits_ids_threaded() # Charger les produits dans un thread
 
     def fetch_data_in_thread(self, method_name, *args):
         worker = DataFetcher(self.conn, method_name, *args)
         worker.data_fetched.connect(self.handle_fetched_data)
         worker.error_occurred.connect(self.handle_fetch_error)
         worker.progress_update.connect(self.update_progress)
-        self.thread_pool.submit(worker.run) # Soumettre au pool de threads
+        QThreadPool.globalInstance().start(worker)
 
     def update_progress(self, value):
-        current_value = self.progress_bar.value()
-        # Incrémenter d'une petite quantité à chaque fois, ou calculer en fonction du nombre de tâches
-        # Par exemple, pour 9 tâches, chaque tâche réussie incrémente de 100 // 9
-        if value == 100: # Si une tâche est terminée
-            self.progress_bar.setValue(current_value + (100 // 9)) # Environ pour 9 tâches initiales
-            if self.progress_bar.value() >= 100:
-                self.progress_bar.hide()
-        # Vous pouvez affiner cette logique pour un suivi plus précis si vous avez un nombre exact de tâches
+        self.progress_bar.setValue(value)
+        if value >= 100:
+            self.progress_bar.hide()
 
     def handle_fetched_data(self, method_name, data):
         try:
@@ -330,239 +552,218 @@ class DashboardModule(QWidget):
                 self.update_occupation_chart(data)
                 self.update_summary_stats(data)
             elif method_name == "ruptures":
-                self.update_table("Produits en rupture", data)
+                self.update_table_data("Produits en rupture", data)
             elif method_name == "produits_non_stockes":
-                self.update_table("Produits jamais stockés", data)
+                self.update_table_data("Produits jamais stockés", data)
             elif method_name == "cellules_vides":
-                self.update_table("Cellules vides", data)
+                self.update_table_data("Cellules vides", data)
             elif method_name == "expirations":
-                self.update_table("Produits expirant bientôt", data)
+                self.update_table_data("Produits expirant bientôt", data)
             elif method_name == "demandes_approvisionnement":
-                self.update_table("Demandes d'approvisionnement", data)
+                self.update_table_data("Demandes d'approvisionnement", data)
             elif method_name == "expeditions_terminées":
-                self.update_table("Expéditions terminées", data)
-            elif method_name == "mouvements_produit":
-                self.update_mouvements_table(data)
+                self.update_table_data("Expéditions terminées", data)
             elif method_name == "ruptures_history":
                 self.update_rupture_history_chart(data)
             elif method_name == "all_produits":
-                self.populate_produit_id_combo(data)
-            
-            # La barre de progression est masquée par update_progress lorsque la valeur atteint 100
-            # Mais assurez-vous qu'elle est toujours masquée même en cas de problème de progression
-            if self.progress_bar.value() >= 90:
-                self.progress_bar.hide()
-
+                self.populate_product_combo(data)
         except Exception as e:
-            logger.error(f"Erreur lors du traitement des données récupérées pour {method_name} : {e}", exc_info=True)
-        finally:
-            # Assurez-vous que la barre de progression se cache même en cas de succès/échec partiel
-            if self.progress_bar.isVisible() and self.progress_bar.value() < 100:
-                self.progress_bar.setValue(100) # Assurer qu'elle est à 100% avant de cacher
-                self.progress_bar.hide()
+            logger.error(f"Erreur traitement données {method_name}: {e}")
 
-
-    def handle_fetch_error(self, method_name, error_message):
-        logger.error(f"Échec de la récupération des données pour {method_name} : {error_message}")
-        self.progress_bar.hide() # Cacher la barre de progression en cas d'erreur
+    def handle_fetch_error(self, method_name, error_msg):
+        logger.error(f"Erreur récupération {method_name}: {error_msg}")
+        # Afficher un message d'erreur dans l'interface si nécessaire
 
     def update_occupation_chart(self, data):
         self.occupation_figure.clear()
         ax = self.occupation_figure.add_subplot(111)
-
-        labels = [d['reference'] for d in data]
-        values = [d['taux_occupation'] for d in data]
-
-        ax.bar(labels, values, color='#4CAF50') # Barres vertes
-        ax.set_title("Occupation des cellules", fontsize=12)
-        ax.set_ylabel("% Occupation", fontsize=10)
         
-        # --- DÉBUT DE LA CORRECTION ---
-        ax.tick_params(axis='x', rotation=45, labelsize=8)
-        for label in ax.get_xticklabels():
-            label.set_horizontalalignment('right')
-        # --- FIN DE LA CORRECTION ---
-
-        ax.tick_params(axis='y', labelsize=8)
-        self.occupation_figure.tight_layout() # Ajuster la mise en page pour éviter le chevauchement des étiquettes
+        if data:
+            labels = [d['reference'] for d in data]
+            values = [d['taux_occupation'] for d in data]
+            
+            bars = ax.bar(labels, values, color='#48bb78')
+            ax.set_title("Taux d'Occupation des Cellules", pad=20)
+            ax.set_ylabel("Taux d'occupation (%)")
+            
+            # Ajouter les valeurs sur les barres
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{height:.1f}%',
+                        ha='center', va='bottom')
+            
+            # Rotation des étiquettes
+            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+            
+            # Style
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.grid(axis='y', linestyle='--', alpha=0.7)
+        else:
+            ax.text(0.5, 0.5, 'Aucune donnée disponible',
+                   horizontalalignment='center',
+                   verticalalignment='center',
+                   transform=ax.transAxes,
+                   color='gray')
+            ax.set_title("Taux d'Occupation des Cellules", pad=20)
+        
+        self.occupation_figure.tight_layout()
         self.occupation_canvas.draw()
 
     def update_rupture_history_chart(self, data):
         self.rupture_history_figure.clear()
         ax = self.rupture_history_figure.add_subplot(111)
-
-        # En supposant que les données sont une liste de dictionnaires comme {'date': 'AAAA-MM-JJ', 'count': N}
-        # Si la fonction handle_ruptures_history n'est pas implémentée, cette section utilisera des données vides.
+        
         if data:
             dates = [datetime.strptime(d['date'], '%Y-%m-%d') for d in data]
             counts = [d['count'] for d in data]
-
-            ax.plot(dates, counts, marker='o', linestyle='-', color='#FF5733') # Ligne orange/rouge
-            ax.set_title("Historique des ruptures", fontsize=12)
-            ax.set_xlabel("Date", fontsize=10)
-            ax.set_ylabel("Nombre de ruptures", fontsize=10)
             
-            # --- DÉBUT DE LA CORRECTION ---
-            ax.tick_params(axis='x', rotation=45, labelsize=8)
-            for label in ax.get_xticklabels():
-                label.set_horizontalalignment('right')
-            # --- FIN DE LA CORRECTION ---
-
-            ax.tick_params(axis='y', labelsize=8)
-            self.rupture_history_figure.autofmt_xdate() # Formater joliment les dates
+            ax.plot(dates, counts, marker='o', linestyle='-', color='#f56565', linewidth=2)
+            ax.set_title("Historique des Ruptures de Stock", pad=20)
+            ax.set_ylabel("Nombre de ruptures")
+            
+            # Format des dates
+            ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%b %Y'))
+            
+            # Style
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.grid(axis='y', linestyle='--', alpha=0.7)
         else:
-            ax.set_title("Historique des ruptures (données non disponibles)", fontsize=12, color='gray')
-            ax.text(0.5, 0.5, 'Pas de données à afficher', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, color='gray')
-
+            ax.text(0.5, 0.5, 'Aucune donnée disponible',
+                   horizontalalignment='center',
+                   verticalalignment='center',
+                   transform=ax.transAxes,
+                   color='gray')
+            ax.set_title("Historique des Ruptures de Stock", pad=20)
+        
         self.rupture_history_figure.tight_layout()
         self.rupture_history_canvas.draw()
 
-
-    def update_table(self, title, data):
-        table = self.tables[title]
+    def update_table_data(self, title, data):
+        table_info = self.tables.get(title)
+        if not table_info:
+            return
+            
+        table = table_info["table"]
+        status_label = table_info["status"]
         
-        # Déterminer les en-têtes de colonne en fonction du premier élément des données, si disponible
+        # Mettre à jour le tableau
         if data:
             headers = list(data[0].keys())
             table.setColumnCount(len(headers))
             table.setHorizontalHeaderLabels(headers)
-        else:
-            table.setColumnCount(3) # Par défaut s'il n'y a pas de données
-            # Exemple d'en-têtes par défaut, à adapter à chaque tableau si nécessaire
+            table.setRowCount(len(data))
+            
+            for row_idx, row_data in enumerate(data):
+                for col_idx, (key, value) in enumerate(row_data.items()):
+                    item = QTableWidgetItem(str(value))
+                    item.setTextAlignment(Qt.AlignCenter)
+                    table.setItem(row_idx, col_idx, item)
+            
+            # Mettre à jour l'indicateur de statut
+            count = len(data)
             if title == "Produits en rupture":
-                table.setHorizontalHeaderLabels(["ID Produit", "Nom Produit", "Quantité Manquante"])
+                status_label.setText(f"<span class='critical-indicator'>{count} rupture(s)</span>")
             elif title == "Produits expirant bientôt":
-                table.setHorizontalHeaderLabels(["ID Produit", "Nom Produit", "Date Expiration"])
+                status_label.setText(f"<span class='warning-indicator'>{count} produit(s)</span>")
             else:
-                table.setHorizontalHeaderLabels(["Col. 1", "Col. 2", "Col. 3"])
-
-        table.setRowCount(len(data))
-        for i, row in enumerate(data):
-            # S'assurer que l'ordre des valeurs correspond aux en-têtes définis
-            for j, value in enumerate(row.values()):
-                item = QTableWidgetItem(str(value))
-                item.setTextAlignment(Qt.AlignCenter) # Centrer le texte dans les cellules du tableau
-                table.setItem(i, j, item)
+                status_label.setText(f"<span class='success-indicator'>{count} élément(s)</span>")
+        else:
+            table.setRowCount(0)
+            status_label.setText("<span style='color:#718096;'>Aucune donnée</span>")
         
-        table.resizeColumnsToContents() # Ajuster la largeur des colonnes au contenu
-        table.horizontalHeader().setStretchLastSection(True) # Faire en sorte que la dernière colonne s'étire
+        table.resizeColumnsToContents()
 
-        icon = self.findChild(QLabel, f"icon_{title.replace(' ', '_').lower()}")
-        if icon:
-            if len(data) == 0:
-                icon.setStyleSheet("background-color: green; border-radius: 5px;")
-            elif (title == "Produits en rupture" or title == "Produits expirant bientôt") and len(data) > 0:
-                # Logique pour rouge/orange basée sur la quantité de données de rupture/expiration
-                # Par exemple, si plus de 5 ruptures est critique, entre 1 et 5 est un avertissement
-                if len(data) <= 2: # Peu de ruptures/expirations = orange
-                    icon.setStyleSheet("background-color: orange; border-radius: 5px;")
-                else: # Beaucoup de ruptures/expirations = rouge
-                    icon.setStyleSheet("background-color: red; border-radius: 5px;")
-            # Couleur par défaut pour les autres tableaux qui n'ont pas d'état critique/avertissement
-            else:
-                icon.setStyleSheet("background-color: #007BFF; border-radius: 5px;") # Bleu pour neutre
+    def update_summary_stats(self, data):
+        if data:
+            nb_cellules = len(data)
+            taux_moyen = sum(d['taux_occupation'] for d in data) / nb_cellules if nb_cellules else 0
+            
+            stats_text = f"""
+                <div style="background-color: #ffffff; border-radius: 8px; padding: 12px;">
+                    <table width="100%">
+                        <tr>
+                            <td style="text-align: center; border-right: 1px solid #e2e8f0;">
+                                <div style="font-size: 24px; color: #4299e1; font-weight: 600;">{nb_cellules}</div>
+                                <div style="font-size: 14px; color: #718096;">Cellules</div>
+                            </td>
+                            <td style="text-align: center; border-right: 1px solid #e2e8f0;">
+                                <div style="font-size: 24px; color: #4299e1; font-weight: 600;">{taux_moyen:.1f}%</div>
+                                <div style="font-size: 14px; color: #718096;">Occupation moyenne</div>
+                            </td>
+                            <td style="text-align: center;">
+                                <div style="font-size: 24px; color: #4299e1; font-weight: 600;">{len(self.tables['Produits en rupture']['table'].rowCount())}</div>
+                                <div style="font-size: 14px; color: #718096;">Produits en rupture</div>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            """
+            self.stats_summary.setText(stats_text)
 
-    def update_summary_stats(self, occupation_data):
-        try:
-            nb_cellules = len(occupation_data)
-            taux_moyen = sum([c['taux_occupation'] for c in occupation_data]) / nb_cellules if nb_cellules else 0
-            self.stats_summary.setText(
-                f"Nombre de cellules : <span style='color:#007BFF;'>{nb_cellules}</span> | Taux d'occupation moyen : <span style='color:#007BFF;'>{round(taux_moyen, 2)}%</span>"
-            )
-        except Exception as e:
-            logger.warning(f"Erreur update_summary_stats : {e}")
-
-    def init_mouvements_section(self):
-        self.mouvements_box = QGroupBox("Historique des Mouvements de produit")
-        vbox = QVBoxLayout()
-
-        filter_layout = QHBoxLayout()
-        self.produit_id_combo = QComboBox()
-        self.date_debut = QDateEdit(calendarPopup=True)
-        self.date_fin = QDateEdit(calendarPopup=True)
-        self.type_combo = QComboBox()
-
-        self.date_debut.setDate(QDate.currentDate().addMonths(-1))
-        self.date_fin.setDate(QDate.currentDate())
-
-        self.type_combo.addItems(["Tous", "Entrée", "Sortie"])
-        filter_layout.addWidget(QLabel("Produit:"))
-        filter_layout.addWidget(self.produit_id_combo)
-        filter_layout.addWidget(QLabel("Du:"))
-        filter_layout.addWidget(self.date_debut)
-        filter_layout.addWidget(QLabel("Au:"))
-        filter_layout.addWidget(self.date_fin)
-        filter_layout.addWidget(QLabel("Type:"))
-        filter_layout.addWidget(self.type_combo)
-
-        btn_refresh = QPushButton("Filtrer Mouvements")
-        btn_refresh.clicked.connect(self.refresh_mouvements)
-        filter_layout.addWidget(btn_refresh)
-
-        vbox.addLayout(filter_layout)
-        
-        self.mouvements_table = QTableWidget()
-        self.mouvements_table.setColumnCount(7) # Nombre de colonnes initial
-        self.mouvements_table.setHorizontalHeaderLabels(['Type', 'Référence Bon', 'Date', 'Quantité', 'Lot', 'Cellule', 'Description'])
-        self.mouvements_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.mouvements_table.setAlternatingRowColors(True)
-        vbox.addWidget(self.mouvements_table)
-
-        self.mouvements_box.setLayout(vbox)
-        self.scroll_content_layout.addWidget(self.mouvements_box)
-
-        # Chargement initial des IDs de produit
-        self.load_produits_ids_threaded()
-
-    def load_produits_ids_threaded(self):
+    def load_products(self):
         self.fetch_data_in_thread("all_produits")
 
-    def populate_produit_id_combo(self, produits):
-        try:
-            self.produit_id_combo.clear()
-            self.produit_id_combo.addItem("Sélectionner un produit", None) # Ajouter une option par défaut "sélectionner tout" ou similaire
-            for p in produits:
-                self.produit_id_combo.addItem(f"{p.get('nom', 'N/A')} (ID: {p.get('idProduit', 'N/A')})", p.get('idProduit'))
-        except Exception as e:
-            logger.error(f"Erreur lors du peuplement des produits dans le combo : {e}")
-
+    def populate_product_combo(self, products):
+        self.product_combo.clear()
+        self.product_combo.addItem("Tous les produits", None)
+        
+        for product in products:
+            self.product_combo.addItem(
+                f"{product.get('nom', 'N/A')} (ID: {product.get('idProduit', 'N/A')})", 
+                product.get('idProduit')
+            )
 
     def refresh_mouvements(self):
-        produit_id = self.produit_id_combo.currentData()
-        if produit_id is None: 
-            self.mouvements_table.setRowCount(0)
-            return
+        product_id = self.product_combo.currentData()
+        date_start = self.date_start.date().toPyDate()
+        date_end = self.date_end.date().toPyDate()
+        movement_type = self.type_combo.currentText()
+        
+        if movement_type == "Tous types":
+            movement_type = ""
+        
+        self.fetch_data_in_thread("mouvements_produit", product_id, date_start, date_end, movement_type)
 
-        date_debut = self.date_debut.date().toPyDate()
-        date_fin = self.date_fin.date().toPyDate()
-        type_mouvement = self.type_combo.currentText()
-        if type_mouvement == "Tous":
-            type_mouvement = "" # Passer une chaîne vide au contrôleur pour récupérer tous les types
-
-        self.fetch_data_in_thread("mouvements_produit", produit_id, date_debut, date_fin, type_mouvement)
-
-    def update_mouvements_table(self, mouvements):
-        self.mouvements_table.setRowCount(len(mouvements))
-        if mouvements:
-            headers = list(mouvements[0].keys())
-            self.mouvements_table.setColumnCount(len(headers))
-            self.mouvements_table.setHorizontalHeaderLabels(headers)
+    def update_mouvements_table(self, data):
+        self.movements_table.setRowCount(len(data))
+        
+        if data:
+            headers = list(data[0].keys())
+            self.movements_table.setColumnCount(len(headers))
+            self.movements_table.setHorizontalHeaderLabels(headers)
+            
+            for row_idx, row_data in enumerate(data):
+                for col_idx, (key, value) in enumerate(row_data.items()):
+                    item = QTableWidgetItem(str(value))
+                    
+                    # Alignement et style selon le type de donnée
+                    if key.lower() in ['quantite', 'montant']:
+                        item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                    elif key.lower() == 'date':
+                        item.setTextAlignment(Qt.AlignCenter)
+                    
+                    self.movements_table.setItem(row_idx, col_idx, item)
         else:
-            self.mouvements_table.setColumnCount(7)
-            self.mouvements_table.setHorizontalHeaderLabels(['Type', 'Référence Bon', 'Date', 'Quantité', 'Lot', 'Cellule', 'Description'])
-
-
-        for i, m in enumerate(mouvements):
-            # S'assurer que l'ordre des clés correspond aux en-têtes de colonne définis si les données arrivent dans un ordre variable
-            for j, key in enumerate(['type', 'reference_bon', 'date', 'quantite', 'lot', 'cellule', 'description']):
-                item = QTableWidgetItem(str(m.get(key, 'N/A')))
-                item.setTextAlignment(Qt.AlignCenter)
-                self.mouvements_table.setItem(i, j, item)
-        self.mouvements_table.resizeColumnsToContents()
-        self.mouvements_table.horizontalHeader().setStretchLastSection(True) # Faire en sorte que la dernière colonne s'étire
+            self.movements_table.setColumnCount(1)
+            self.movements_table.setHorizontalHeaderLabels(["Aucun mouvement trouvé"])
+        
+        self.movements_table.resizeColumnsToContents()
 
     def closeEvent(self, event):
-        # Arrêter le pool de threads gracieusement lorsque le widget se ferme
-        self.thread_pool.shutdown(wait=True)
+        QThreadPool.globalInstance().waitForDone()
         super().closeEvent(event)
 
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    
+    # Configuration fictive pour le test
+    class MockUser:
+        def get(self, key, default):
+            return "Admin" if key == "nom" else default
+    
+    dashboard = DashboardModule(None, MockUser())
+    dashboard.show()
+    sys.exit(app.exec_())

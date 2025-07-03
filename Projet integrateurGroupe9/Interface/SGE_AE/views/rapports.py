@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 from datetime import date
 from matplotlib.ticker import MaxNLocator
 
+
 class RapportsModule(QWidget):
     """Vue dédiée à l'affichage et l'export des alertes"""
     
@@ -122,18 +123,17 @@ class RapportsModule(QWidget):
         self.table.resizeColumnsToContents()
 
     def export_csv(self):
-        """Exporte les données au format CSV"""
+        """Exporte les données au format CSV (sans ui_utils)"""
         if not self.data:
             QMessageBox.warning(self, "Export", "Aucune donnée à exporter")
             return
 
         path, _ = QFileDialog.getSaveFileName(
-            self, 
-            "Exporter vers CSV", 
-            f"alertes_{date.today().strftime('%Y%m%d')}.csv", 
+            self,
+            "Exporter vers CSV",
+            f"alertes_{date.today().strftime('%Y%m%d')}.csv",
             "CSV Files (*.csv)"
         )
-        
         if not path:
             return
 
@@ -235,17 +235,17 @@ class RapportsModule(QWidget):
         mode = self.mode_selector.currentText()
         plt.figure(figsize=(10, 6))
         plt.style.use('ggplot')
-        
+
         if mode == "Produits expirant bientôt":
-            self.plot_expiration_chart()
+            plot_expiration(self.data, self.jours.value())
         elif mode == "Occupation des cellules":
-            self.plot_occupation_chart()
+            plot_occupation(self.data)
         elif mode == "Produits en rupture":
-            self.plot_rupture_chart()
+            plot_rupture(self.data)
         else:
             QMessageBox.information(self, "Graphique", "Pas de graphique défini pour ce type.")
             return
-        
+
         plt.tight_layout()
         plt.show()
 
@@ -297,3 +297,72 @@ class RapportsModule(QWidget):
             plt.text(i, 0.5, nom, ha='center', va='center', rotation=90, color='white')
 
         plt.xticks(rotation=45)  # optionnel si beaucoup de produits
+# fichiers utilitaires a creer: charts.py et ui_utils.py
+
+# charts.py
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+
+def plot_expiration(data, jours):
+    sorted_data = sorted(data, key=lambda x: x['jours_restants'])
+    noms = [item['nom'] for item in sorted_data]
+    jours_list = [item['jours_restants'] for item in sorted_data]
+
+    bars = plt.barh(noms, jours_list, color='orange')
+    plt.xlabel("Jours restants")
+    plt.title(f"Produits expirant dans moins de {jours} jours")
+
+    for bar in bars:
+        width = bar.get_width()
+        plt.text(width + 0.5, bar.get_y() + bar.get_height()/2,
+                 f'{int(width)}', ha='left', va='center')
+
+def plot_occupation(data):
+    sorted_data = sorted(data, key=lambda x: x['pourcentage_occupation'])
+    noms = [item['reference'] for item in sorted_data]
+    taux = [item['pourcentage_occupation'] for item in sorted_data]
+
+    bars = plt.barh(noms, taux, color='teal')
+    plt.xlabel("% Occupation")
+    plt.title("Occupation des cellules")
+    plt.xlim(0, 100)
+
+    for bar in bars:
+        width = bar.get_width()
+        plt.text(width + 1, bar.get_y() + bar.get_height()/2,
+                 f'{width:.1f}%', ha='left', va='center')
+
+def plot_rupture(data):
+    noms = [item['nom'] for item in data if 'nom' in item]
+    plt.bar(noms, [1]*len(noms), color='red')
+    plt.title("Produits en rupture de stock")
+    plt.yticks([])
+    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+
+    for i, nom in enumerate(noms):
+        plt.text(i, 0.5, nom, ha='center', va='center', rotation=90, color='white')
+    plt.xticks(rotation=45)
+
+# ui_utils.py
+import csv
+from datetime import date
+from PyQt5.QtWidgets import QFileDialog, QMessageBox
+
+def export_table_to_csv_dict(parent_widget, data, filename_prefix="export"):
+    path, _ = QFileDialog.getSaveFileName(
+        parent_widget,
+        "Exporter vers CSV",
+        f"{filename_prefix}_{date.today().strftime('%Y%m%d')}.csv",
+        "CSV Files (*.csv)"
+    )
+    if not path:
+        return
+
+    try:
+        with open(path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=data[0].keys(), delimiter=';')
+            writer.writeheader()
+            writer.writerows(data)
+        QMessageBox.information(parent_widget, "Export", f"Exporté avec succès vers {path}")
+    except Exception as e:
+        QMessageBox.critical(parent_widget, "Erreur export", f"Erreur lors de l'export CSV : {str(e)}")

@@ -1,183 +1,159 @@
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QComboBox, QPushButton, 
-    QLabel, QTableWidget, QTableWidgetItem, 
-    QMessageBox, QHBoxLayout, QFileDialog
+    QWidget, QVBoxLayout, QFormLayout, QLabel, QLineEdit,
+    QComboBox, QSpinBox, QDateEdit, QPushButton, QMessageBox,
+    QHBoxLayout
 )
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor
-from controllers.supervision_controller import (
-    handle_occupation_cellules, handle_ruptures,
-    handle_produits_non_stockes, handle_cellules_vides,
-    handle_expeditions_terminées
-)
-from controllers.approvisionnement_controller import  handle_demandes_approvisionnement 
-import csv
-from datetime import date
+from PyQt5.QtCore import QDate, Qt, pyqtSignal
+from PyQt5.QtGui import QIntValidator
+from controllers.reception_controller import handle_receptionner_lot
+from models.product_model import get_all_products
 
-class SupervisionModule(QWidget):
-    def __init__(self, conn, user):
+
+
+
+class ReceptionDetailWindow(QWidget):
+    """
+    Fenêtre de saisie pour réceptionner un lot.
+    """
+    reception_completed = pyqtSignal()
+
+    def __init__(self, conn, user, reception_id):
         super().__init__()
         self.conn = conn
         self.user = user
-        self.current_data = None
-        self.init_ui()
+        self.reception_id = reception_id
 
-    def init_ui(self):
-        layout = QVBoxLayout()
-        
-        # Sélection du rapport
-        self.select = QComboBox()
-        self.select.addItems([
-            "Occupation des cellules",
-            "Produits jamais stockés",
-            "Ruptures de stock",
-            "Cellules vides",
-            "Expéditions terminées",
-            "Demandes d'approvisionnement" 
-        ])
-        layout.addWidget(QLabel("Sélection du rapport de supervision:"))
-        layout.addWidget(self.select)
+        self._setup_ui()
+        self._load_products()
 
-        # Boutons
+    def _setup_ui(self):
+        """Initialise l’interface utilisateur."""
+        self.setWindowTitle(f"Réception - Bon #{self.reception_id}")
+        self.setMinimumWidth(400)
+
+        main_layout = QVBoxLayout()
+
+        main_layout.addWidget(QLabel(f"Bon de Réception ID : {self.reception_id}"))
+        main_layout.addSpacing(10)
+
+        form_layout = QFormLayout()
+        form_layout.setLabelAlignment(Qt.AlignRight)
+        form_layout.setFormAlignment(Qt.AlignHCenter | Qt.AlignTop)
+        form_layout.setSpacing(15)
+
+        # Référence du lot
+        self.lot_ref = QLineEdit()
+        self.lot_ref.setPlaceholderText("Ex: LOT-2023-001")
+        form_layout.addRow("Référence du lot*:", self.lot_ref)
+
+        # Produit (combo editable)
+        self.product_combo = QComboBox()
+        self.product_combo.setEditable(True)
+        self.product_combo.setInsertPolicy(QComboBox.NoInsert)
+        form_layout.addRow("Produit*:", self.product_combo)
+
+        # Quantité
+        self.quantite = QSpinBox()
+        self.quantite.setRange(1, 100000)
+        self.quantite.setValue(1)
+        form_layout.addRow("Quantité*:", self.quantite)
+
+        # Date production
+        self.date_prod = QDateEdit(QDate.currentDate())
+        self.date_prod.setCalendarPopup(True)
+        form_layout.addRow("Date de production:", self.date_prod)
+
+        # Date expiration
+        self.date_exp = QDateEdit(QDate.currentDate().addYears(1))
+        self.date_exp.setCalendarPopup(True)
+        form_layout.addRow("Date d'expiration:", self.date_exp)
+
+        # Cellule
+        self.cellule = QLineEdit()
+        self.cellule.setValidator(QIntValidator(1, 100000))
+        self.cellule.setPlaceholderText("Numéro de cellule")
+        form_layout.addRow("Cellule*:", self.cellule)
+
+        main_layout.addLayout(form_layout)
+
+        # Boutons Valider / Annuler
         btn_layout = QHBoxLayout()
-        
-        show_btn = QPushButton("Afficher")
-        show_btn.clicked.connect(self.load_data)
-        btn_layout.addWidget(show_btn)
-        
-        self.export_btn = QPushButton("Exporter CSV")
-        self.export_btn.clicked.connect(self.export_csv)
-        self.export_btn.setEnabled(False)
-        btn_layout.addWidget(self.export_btn)
+        btn_valider = QPushButton("Valider la réception")
+        btn_valider.setStyleSheet("background-color: #4CAF50; color: white;")
+        btn_valider.clicked.connect(self._receptionner)
 
-        
-        layout.addLayout(btn_layout)
+        btn_annuler = QPushButton("Annuler")
+        btn_annuler.setStyleSheet("background-color: #f44336; color: white;")
+        btn_annuler.clicked.connect(self.close)
 
-        # Zone d'information
-        self.info_label = QLabel()
-        self.info_label.setStyleSheet("font-style: italic; color: #555;")
-        layout.addWidget(self.info_label)
+        btn_layout.addWidget(btn_valider)
+        btn_layout.addWidget(btn_annuler)
 
-        # Tableau
-        self.table = QTableWidget()
-        self.table.setAlternatingRowColors(True)
-        layout.addWidget(self.table)
+        main_layout.addLayout(btn_layout)
+        self.setLayout(main_layout)
 
-        self.setLayout(layout)
-        self.setMinimumSize(800, 500)
-
-    def load_data(self):
+    def _load_products(self):
+        """Charge la liste des produits pour la combo."""
         try:
-            option = self.select.currentText()
-            self.current_data = None
-            self.info_label.clear()
-
-            controller_map = {
-                "Occupation des cellules": handle_occupation_cellules,
-                "Produits jamais stockés": handle_produits_non_stockes,
-                "Ruptures de stock": handle_ruptures,
-                "Cellules vides": handle_cellules_vides,
-                "Expéditions terminées": handle_expeditions_terminées,
-              
-                "Demandes d'approvisionnement": handle_demandes_approvisionnement  # <- ajout ici
-
-
-            }
-
-            handler = controller_map.get(option)
-            if not handler:
-                QMessageBox.warning(self, "Erreur", "Type de rapport non reconnu.")
-                return
-
-            data = handler(self.conn)
-            self.current_data = data
-
-            if not data:
-                self.info_label.setText("Aucune donnée disponible pour ce rapport.")
-                self.table.clear()
-                self.table.setRowCount(0)
-                self.table.setColumnCount(0)
-                self.export_btn.setEnabled(False)
-                return
-
-            headers = list(data[0].keys())
-            self.table.clear()
-            self.table.setColumnCount(len(headers))
-            self.table.setHorizontalHeaderLabels(headers)
-            self.table.setRowCount(len(data))
-
-            for row, item in enumerate(data):
-                for col, header in enumerate(headers):
-                    value = item.get(header, "")
-                    item_widget = QTableWidgetItem(str(value))
-
-                    # Colorisation conditionnelle
-                    if option == "Occupation des cellules" and header == "pourcentage_occupation":
-                        try:
-                            percent = float(value)
-                            item_widget = QTableWidgetItem(f"{percent:.1f}%")
-                            if percent > 80:
-                                item_widget.setBackground(QColor(255, 200, 200))  # Rouge clair
-                            elif percent > 60:
-                                item_widget.setBackground(QColor(255, 255, 200))  # Jaune clair
-                        except ValueError:
-                    
-                         pass  # Ignore if not convertible
-                    
-                   
-                    self.table.setItem(row, col, item_widget)
-
-            self.table.resizeColumnsToContents()
-            self.export_btn.setEnabled(True)
-
-            # Info
-            if option == "Occupation des cellules":
-                self.update_info_label(data, "cellules chargées à plus de 80%", lambda x: float(x.get('pourcentage_occupation', 0)) > 80)
-            elif option == "Produits jamais stockés":
-                self.update_info_label(data, "produits jamais stockés")
-            elif option == "Ruptures de stock":
-                self.update_info_label(data, "produits en rupture")
-            elif option == "Cellules vides":
-                self.update_info_label(data, "cellules vides")
-            
-            elif option == "Expéditions terminées":
-                         self.update_info_label(data, "expéditions terminées")
-                         
+            products = get_all_products(self.conn)
+            for prod in products:
+                display = f"{prod['idProduit']} - {prod['reference']} - {prod['nom']}"
+                self.product_combo.addItem(display, prod['idProduit'])
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors du chargement : {str(e)}")
-            self.export_btn.setEnabled(False)
+            QMessageBox.warning(
+                self,
+                "Chargement produits",
+                f"Impossible de charger les produits:\n{e}"
+            )
 
+    def _validate_form(self):
+        """Vérifie que les champs obligatoires sont remplis."""
+        if not self.lot_ref.text().strip():
+            QMessageBox.warning(self, "Champ requis", "Veuillez entrer la référence du lot.")
+            return False
+        if not self.product_combo.currentData():
+            QMessageBox.warning(self, "Champ requis", "Veuillez sélectionner un produit valide.")
+            return False
+        if not self.cellule.text().strip():
+            QMessageBox.warning(self, "Champ requis", "Veuillez entrer un numéro de cellule.")
+            return False
+        return True
 
-    def update_info_label(self, data, label_text, condition=None):
-        """Met à jour le label d'information avec le nombre d'éléments"""
-        count = len(data)
-        if condition:
-            filtered_count = sum(1 for item in data if condition(item))
-            self.info_label.setText(f"{count} éléments trouvés ({filtered_count} {label_text})")
-        else:
-            self.info_label.setText(f"{count} {label_text} trouvés")
-
-    def export_csv(self):
-        """Exporte les données au format CSV"""
-        if not self.current_data:
-            QMessageBox.warning(self, "Export", "Aucune donnée à exporter")
+    def _receptionner(self):
+        """Valide et enregistre la réception du lot."""
+        if not self._validate_form():
             return
-
-        path, _ = QFileDialog.getSaveFileName(
-            self, 
-            "Exporter vers CSV", 
-            f"supervision_{date.today().strftime('%Y%m%d')}.csv", 
-            "CSV Files (*.csv)"
-        )
-        
-        if not path:
-            return
-
         try:
-            with open(path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=self.current_data[0].keys(), delimiter=';')
-                writer.writeheader()
-                writer.writerows(self.current_data)
-            QMessageBox.information(self, "Export", f"Exporté avec succès vers {path}")
+            id_lot = handle_receptionner_lot(
+                self.conn,
+                self.reception_id,
+                self.lot_ref.text().strip(),
+                self.product_combo.currentData(),
+                self.quantite.value(),
+                self.date_prod.date().toPyDate(),
+                self.date_exp.date().toPyDate(),
+                int(self.cellule.text())
+            )
+            QMessageBox.information(
+                self,
+                "Succès",
+                f"Réception enregistrée avec succès.\nID Lot : {id_lot}"
+            )
+            self.reception_completed.emit()
+            self.close()
+
+        except ValueError as ve:
+            QMessageBox.warning(self, "Erreur de saisie", str(ve))
+
         except Exception as e:
-            QMessageBox.critical(self, "Erreur export", f"Erreur lors de l'export : {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Erreur",
+                f"Erreur lors de la réception :\n{e}"
+            )
+
+
+class SupervisionModule(QWidget):
+    def __init__(self,):
+        super().__init__()
+        # ... ton code ...

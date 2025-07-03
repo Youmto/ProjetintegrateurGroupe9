@@ -1,6 +1,7 @@
 import logging
 from SGE_AE.database import execute_query
 
+
 logger = logging.getLogger(__name__)
 
 def get_all_lots(conn):
@@ -8,7 +9,7 @@ def get_all_lots(conn):
         query = "SELECT idLot, numeroLot FROM LOT ORDER BY numeroLot;"
         return execute_query(conn, query, fetch=True)
     except Exception as e:
-        logger.error(f"[get_all_lots] Erreur : {e}")
+        logger.error(f"📦 [get_all_lots] Erreur : {e}")
         return []
 
 def get_produits_par_lot(conn, id_lot):
@@ -24,7 +25,7 @@ def get_produits_par_lot(conn, id_lot):
         rows = execute_query(conn, query, (id_lot,), fetch=True)
         return rows
     except Exception as e:
-        logger.error(f"[get_produits_par_lot] Erreur : {e}")
+        logger.error(f"🔍 [get_produits_par_lot] Erreur : {e}")
         return []
 
 def supprimer_produit_dans_colis(conn, id_colis, id_produit):
@@ -39,14 +40,14 @@ def supprimer_produit_dans_colis(conn, id_colis, id_produit):
         """
         result = execute_query(conn, query_lot, (id_colis, id_produit), fetch=True)
         if not result:
-            logger.error(f"[supprimer_produit_dans_colis] Lot non trouvé pour colis {id_colis} et produit {id_produit}")
+            logger.error(f"⚠️ [supprimer_produit_dans_colis] Lot non trouvé pour colis {id_colis} et produit {id_produit}")
             return
         id_lot = result[0][0]
 
         query = "DELETE FROM CONTENIR WHERE idColis = %s AND idLot = %s;"
         execute_query(conn, query, (id_colis, id_lot))
     except Exception as e:
-        logger.error(f"[supprimer_produit_dans_colis] Erreur : {e}")
+        logger.error(f"❌ [supprimer_produit_dans_colis] Erreur : {e}")
 
 def modifier_produit_dans_colis(conn, id_colis, id_produit, quantite,
                                version=None, type_licence=None, date_expiration=None,
@@ -65,7 +66,7 @@ def modifier_produit_dans_colis(conn, id_colis, id_produit, quantite,
         """
         result = execute_query(conn, query_lot, (id_produit, id_colis), fetch=True)
         if not result:
-            logger.error(f"[modifier_produit_dans_colis] Aucun lot trouvé pour colis {id_colis} et produit {id_produit}")
+            logger.error(f"⚠️ [modifier_produit_dans_colis] Aucun lot trouvé pour colis {id_colis} et produit {id_produit}")
             return
 
         id_lot = result[0][0]
@@ -101,4 +102,4 @@ def modifier_produit_dans_colis(conn, id_colis, id_produit, quantite,
             """
             execute_query(conn, query3, (id_produit, longueur, largeur, hauteur, masse, volume))
     except Exception as e:
-        logger.error(f"[modifier_produit_dans_colis] Erreur : {e}")
+        logger.error(f"❌ [modifier_produit_dans_colis] Erreur : {e}")

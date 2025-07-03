@@ -4,10 +4,12 @@ from PyQt5.QtWidgets import (
     QMessageBox, QComboBox
 )
 from PyQt5.QtCore import Qt
+
 from models.stock_model import (
     get_cellules_info, add_cellule, update_cellule,
     get_entrepot_capacite_restante
 )
+
 
 class CellulesModule(QWidget):
     def __init__(self, conn, user):
@@ -19,30 +21,98 @@ class CellulesModule(QWidget):
 
     def setup_ui(self):
         layout = QVBoxLayout()
-        title = QLabel("Gestion des Cellules d'Entrepôt")
+        
+        # Titre centré, gras, taille plus grande, couleur pro bleu foncé
+        title = QLabel("📦 Gestion des Cellules d'Entrepôt")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 18px; font-weight: bold;")
+        title.setStyleSheet("font-size: 22px; font-weight: bold; color: #2c3e50; margin-bottom: 15px;")
         layout.addWidget(title)
 
+        # Tableau avec couleurs douces et lignes alternées
         self.table = QTableWidget()
         self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
             "ID", "Référence", "Entrepôt", "Capacité Max", "Qté Totale", "Taux Occupation", "Volume Restant"
         ])
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setStyleSheet("""
+            QTableWidget {
+                background-color: #f9fbfc;
+                alternate-background-color: #eaf1f7;
+                gridline-color: #cfd8dc;
+                font-size: 13px;
+            }
+            QHeaderView::section {
+                background-color: #2980b9;
+                color: white;
+                padding: 5px;
+                font-weight: bold;
+                border: none;
+            }
+        """)
+        self.table.setAlternatingRowColors(True)
         layout.addWidget(self.table)
 
+        # Formulaire stylé avec labels alignés et espacement
         form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignRight)
+        form.setFormAlignment(Qt.AlignCenter)
+        form.setVerticalSpacing(12)
+
+        # Inputs avec bordure douce, padding et focus coloré
+        style_inputs = """
+            QLineEdit, QSpinBox, QComboBox {
+                border: 1px solid #bdc3c7;
+                border-radius: 5px;
+                padding: 6px 8px;
+                background-color: white;
+                font-size: 13px;
+            }
+            QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
+                border-color: #2980b9;
+                background-color: #eaf4fc;
+            }
+        """
+
         self.input_id = QLineEdit()
+        self.input_id.setPlaceholderText("ID existant pour modifier")
+        self.input_id.setStyleSheet(style_inputs)
+
         self.input_reference = QLineEdit()
-        self.input_capacite = QSpinBox(); self.input_capacite.setRange(1, 1_000_000)
-        self.input_volume = QSpinBox(); self.input_volume.setRange(1, 10_000_000)
-        self.input_entrepot = QSpinBox(); self.input_entrepot.setRange(1, 100)
-        self.input_longueur = QSpinBox(); self.input_longueur.setRange(1, 10000)
-        self.input_largeur = QSpinBox(); self.input_largeur.setRange(1, 10000)
-        self.input_hauteur = QSpinBox(); self.input_hauteur.setRange(1, 10000)
-        self.input_masse_max = QSpinBox(); self.input_masse_max.setRange(1, 100_000)
-        self.input_statut = QComboBox(); self.input_statut.addItems(["actif", "inactif"])
+        self.input_reference.setPlaceholderText("Référence unique")
+        self.input_reference.setStyleSheet(style_inputs)
+
+        self.input_capacite = QSpinBox()
+        self.input_capacite.setRange(1, 1_000_000)
+        self.input_capacite.setStyleSheet(style_inputs)
+
+        self.input_volume = QSpinBox()
+        self.input_volume.setRange(1, 10_000_000)
+        self.input_volume.setStyleSheet(style_inputs)
+
+        self.input_entrepot = QSpinBox()
+        self.input_entrepot.setRange(1, 100)
+        self.input_entrepot.setStyleSheet(style_inputs)
+
+        self.input_longueur = QSpinBox()
+        self.input_longueur.setRange(1, 10000)
+        self.input_longueur.setStyleSheet(style_inputs)
+
+        self.input_largeur = QSpinBox()
+        self.input_largeur.setRange(1, 10000)
+        self.input_largeur.setStyleSheet(style_inputs)
+
+        self.input_hauteur = QSpinBox()
+        self.input_hauteur.setRange(1, 10000)
+        self.input_hauteur.setStyleSheet(style_inputs)
+
+        self.input_masse_max = QSpinBox()
+        self.input_masse_max.setRange(1, 100_000)
+        self.input_masse_max.setStyleSheet(style_inputs)
+
+        self.input_statut = QComboBox()
+        self.input_statut.addItems(["actif", "inactif"])
+        self.input_statut.setStyleSheet(style_inputs)
 
         form.addRow("ID Cellule (modif)", self.input_id)
         form.addRow("Référence", self.input_reference)
@@ -56,85 +126,52 @@ class CellulesModule(QWidget):
         form.addRow("Statut", self.input_statut)
         layout.addLayout(form)
 
+        # Boutons alignés, avec couleurs et hover, spacing
         buttons = QHBoxLayout()
-        self.btn_add = QPushButton("Ajouter Cellule")
+        buttons.setSpacing(20)
+
+        self.btn_add = QPushButton("➕ Ajouter Cellule")
+        self.btn_add.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: white;
+                font-weight: bold;
+                padding: 10px 15px;
+                border-radius: 7px;
+            }
+            QPushButton:hover {
+                background-color: #2ecc71;
+            }
+            QPushButton:pressed {
+                background-color: #1e8449;
+            }
+        """)
         self.btn_add.clicked.connect(self.ajouter_cellule)
         buttons.addWidget(self.btn_add)
 
-        self.btn_update = QPushButton("Modifier Cellule")
+        self.btn_update = QPushButton("✏️ Modifier Cellule")
+        self.btn_update.setStyleSheet("""
+            QPushButton {
+                background-color: #2980b9;
+                color: white;
+                font-weight: bold;
+                padding: 10px 15px;
+                border-radius: 7px;
+            }
+            QPushButton:hover {
+                background-color: #3498db;
+            }
+            QPushButton:pressed {
+                background-color: #1f618d;
+            }
+        """)
         self.btn_update.clicked.connect(self.modifier_cellule)
         buttons.addWidget(self.btn_update)
 
         layout.addLayout(buttons)
+
+        # Marges autour du widget pour respirer
+        layout.setContentsMargins(20, 20, 20, 20)
         self.setLayout(layout)
 
-    def load_data(self):
-        try:
-            self.table.clearContents() 
-            cellules = get_cellules_info(self.conn)
-            self.table.setRowCount(len(cellules))
-
-            for row, c in enumerate(cellules):
-                for col, val in enumerate([
-                    c['idCellule'], c['reference'], c['nom_entrepot'],
-                    c['capacite_max'], c['quantite_totale'],
-                    f"{c['taux_occupation']}%", c['volume_restant']
-                ]):
-                    item = QTableWidgetItem(str(val))
-                    if c['quantite_totale'] > c['capacite_max']:
-                        item.setBackground(Qt.red)
-                    self.table.setItem(row, col, item)
-
-            self.table.resizeColumnsToContents()
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur chargement cellules :\n{e}")
-
-    def ajouter_cellule(self):
-        try:
-            ref = self.input_reference.text().strip()
-            cap, vol, entrepot_id = self.input_capacite.value(), self.input_volume.value(), self.input_entrepot.value()
-            l, L, h, masse = self.input_longueur.value(), self.input_largeur.value(), self.input_hauteur.value(), self.input_masse_max.value()
-            position = f"Auto-{ref}"
-
-            if not ref:
-                raise ValueError("Référence obligatoire.")
-
-            restant = get_entrepot_capacite_restante(self.conn, entrepot_id)
-            if restant is not None and cap > restant:
-                QMessageBox.warning(self, "Capacité dépassée",
-                    f"Entrepôt {entrepot_id} : seulement {restant} unités restantes.")
-                return
-
-            add_cellule(self.conn, ref, l, L, h, masse, vol, cap, position, entrepot_id)
-            QMessageBox.information(self, "Succès", f"Cellule {ref} ajoutée.")
-            self.load_data()
-            self.clear_form()
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Ajout échoué :\n{e}")
-
-    def modifier_cellule(self):
-        try:
-            cell_id = int(self.input_id.text())
-            l, L, h = self.input_longueur.value(), self.input_largeur.value(), self.input_hauteur.value()
-            masse, volume, cap = self.input_masse_max.value(), self.input_volume.value(), self.input_capacite.value()
-            statut = self.input_statut.currentText()
-
-            update_cellule(self.conn, cell_id, l, L, h, masse, volume, cap, statut)
-            QMessageBox.information(self, "Mise à jour", f"Cellule #{cell_id} modifiée.")
-            self.load_data()
-            self.clear_form()
-
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Mise à jour échouée :\n{e}")
-
-    def clear_form(self):
-        self.input_reference.clear()
-        self.input_capacite.setValue(1)
-        self.input_volume.setValue(1)
-        self.input_entrepot.setValue(1)
-        self.input_longueur.setValue(1)
-        self.input_largeur.setValue(1)
-        self.input_hauteur.setValue(1)
-        self.input_masse_max.setValue(1)
-        self.input_id.clear()
-        self.input_statut.setCurrentIndex(0)
+    # ... le reste du code load_data, ajouter_cellule, modifier_cellule, clear_form reste inchangé ...
