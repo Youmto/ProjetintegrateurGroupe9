@@ -3,7 +3,7 @@ import os
 from PyQt5.QtWidgets import QApplication
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from views.login import LoginWindow
-from views.supervision import ReceptionDetailWindow
+from views.supervision import SupervisionModule
 from views.livreur_confirmation import LivreurConfirmationWindow
 from database import create_connection
 import logging

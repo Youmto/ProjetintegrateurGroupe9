@@ -1,147 +1,110 @@
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
-    QSpinBox, QDateEdit, QMessageBox, QHeaderView, QLabel
+    QWidget, QVBoxLayout, QLabel, QPushButton,
+    QTableWidget, QTableWidgetItem, QMessageBox, QHBoxLayout
 )
-from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QFont
-
-from controllers.approvisionnement_controller import (
-    charger_produits_a_approvisionner, ajouter_demande_approvisionnement
-)
-
-
-class ApprovisionnementWindow(QWidget):
-    def __init__(self, conn, user):
-        super().__init__()
-        self.conn = conn
-        self.user = user  # idOrganisation fixé à 1 ici
-
-        self.setWindowTitle("📦 Approvisionner l'entrepôt")
-        self.resize(800, 450)
-
-        self.layout = QVBoxLayout(self)
-
-        title = QLabel("📋 Liste des produits à approvisionner")
-        title.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        title.setStyleSheet("color: #2471A3; margin-bottom: 10px;")
-        self.layout.addWidget(title)
-
-        self.table = QTableWidget()
-        self.layout.addWidget(self.table)
-
-        self.btn_valider = QPushButton("✅ Valider l'approvisionnement sélectionné")
-        self.btn_valider.setStyleSheet("""
-            QPushButton {
-                background-color: #28B463; color: white;
-                font-weight: bold; padding: 10px; border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #239B56;
-            }
-        """)
-        self.btn_valider.clicked.connect(self.valider_approvisionnement)
-        self.layout.addWidget(self.btn_valider)
-
-        self.charger_table()
-
-    def charger_table(self):
-        produits = charger_produits_a_approvisionner(self.conn)
-
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels([
-            "ID", "Nom", "Quantité actuelle", "Quantité à approvisionner", "📅 Date prévue"
-        ])
-        self.table.setRowCount(len(produits))
-
-        for row, produit in enumerate(produits):
-            id_produit = str(produit[0])
-            nom_produit = produit[1]
-            quantite_actuelle = str(produit[2] if produit[2] is not None else 0)
-
-            # ID produit (non éditable)
-            item_id = QTableWidgetItem(id_produit)
-            item_id.setFlags(item_id.flags() & ~Qt.ItemIsEditable)
-            self.table.setItem(row, 0, item_id)
-
-            # Nom produit (non éditable)
-            item_nom = QTableWidgetItem(nom_produit)
-            item_nom.setFlags(item_nom.flags() & ~Qt.ItemIsEditable)
-            self.table.setItem(row, 1, item_nom)
-
-            # Quantité actuelle (non éditable)
-            item_qte = QTableWidgetItem(quantite_actuelle)
-            item_qte.setFlags(item_qte.flags() & ~Qt.ItemIsEditable)
-            self.table.setItem(row, 2, item_qte)
-
-            # Quantité à approvisionner (QSpinBox)
-            spin_quantite = QSpinBox()
-            spin_quantite.setRange(0, 10000)
-            spin_quantite.setValue(0)
-            self.table.setCellWidget(row, 3, spin_quantite)
-
-            # Date prévue (QDateEdit)
-            date_edit = QDateEdit()
-            date_edit.setDate(QDate.currentDate())
-            date_edit.setCalendarPopup(True)
-            self.table.setCellWidget(row, 4, date_edit)
-
-        header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-
-        # Style tableau
-        self.table.setStyleSheet("""
-            QTableWidget {
-                background-color: #F9F9F9;
-                gridline-color: #D5DBDB;
-                font-size: 13px;
-            }
-            QHeaderView::section {
-                background-color: #2980B9;
-                color: white;
-                font-weight: bold;
-                padding: 4px;
-            }
-        """)
-
-    def valider_approvisionnement(self):
-        id_organisation = 1  # Organisation fixée
-
-        any_approvisionnement = False
-
-        for row in range(self.table.rowCount()):
-            try:
-                id_produit = int(self.table.item(row, 0).text())
-                quantite = self.table.cellWidget(row, 3).value()
-                date = self.table.cellWidget(row, 4).date().toPyDate()
-
-                if quantite > 0:
-                    ajouter_demande_approvisionnement(
-                        self.conn, id_produit, quantite, date, id_organisation
-                    )
-                    any_approvisionnement = True
-            except Exception as e:
-                QMessageBox.warning(
-                    self, "⚠️ Erreur",
-                    f"Échec pour le produit {id_produit} : {str(e)}"
-                )
-
-        if any_approvisionnement:
-            QMessageBox.information(
-                self, "✔️ Succès", "Les approvisionnements ont été enregistrés avec succès."
-            )
-            self.charger_table()
-            self.table.scrollToTop()
-        else:
-            QMessageBox.information(
-                self, "ℹ️ Aucun approvisionnement",
-                "Aucun produit avec une quantité supérieure à 0 n'a été sélectionné."
-            )
-
+from PyQt5.QtCore import Qt
+from datetime import datetime
+from controllers.expedition_controller import handle_colis_en_cours, handle_confirmer_livraison 
+from models.expedition_model import get_pending_expeditions
 
 class LivreurConfirmationWindow(QWidget):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, db_conn, user):
+        super().__init__()
+        self.db_conn = db_conn
+        self.user = user
+        self.setWindowTitle("Confirmation de Livraison")
+        self.setMinimumSize(800, 400)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        self.title = QLabel("Colis en cours de livraison")
+        self.title.setStyleSheet("font-size: 16px; font-weight: bold;")
+        layout.addWidget(self.title)
+
+        self.table = QTableWidget()
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels([
+            "ID Colis", "Référence", "Date création", "Bon d'expédition", "Statut"
+        ])
+        
+        # Configuration améliorée du tableau
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setSortingEnabled(True)
+        
+        layout.addWidget(self.table)
+
+        buttons = QHBoxLayout()
+        self.confirm_btn = QPushButton("Confirmer la livraison")
+        self.confirm_btn.clicked.connect(self.confirmer_livraison)
+        buttons.addWidget(self.confirm_btn)
+
+        self.refresh_btn = QPushButton("Rafraîchir")
+        self.refresh_btn.clicked.connect(self.charger_colis)
+        buttons.addWidget(self.refresh_btn)
+
+        layout.addLayout(buttons)
+        self.setLayout(layout)
+        self.charger_colis()
+
+    def charger_colis(self):
+        try:
+            colis = handle_colis_en_cours(self.db_conn)
+
+            if not colis:
+                QMessageBox.information(self, "Aucun colis", "Aucun colis en cours à livrer.")
+                self.title.setText("Colis en cours de livraison (0)")
+                self.table.setRowCount(0)
+                return
+                
+            self.table.setRowCount(len(colis))
+            for row, c in enumerate(colis):
+                self.table.setItem(row, 0, QTableWidgetItem(str(c['idColis'])))
+                self.table.setItem(row, 1, QTableWidgetItem(c['reference']))
+                
+                # Gestion robuste de la date
+                date = c['date_creation']
+                if isinstance(date, str):
+                    date = datetime.fromisoformat(date)
+                self.table.setItem(row, 2, QTableWidgetItem(date.strftime("%d/%m/%Y")))
+                
+                self.table.setItem(row, 3, QTableWidgetItem(c['bon_expedition']))
+                self.table.setItem(row, 4, QTableWidgetItem(c['statut']))
+            
+            self.table.resizeColumnsToContents()
+            self.title.setText(f"Colis en cours de livraison ({len(colis)})")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Chargement échoué : {str(e)}")
+
+    def confirmer_livraison(self):
+        selected_row = self.table.currentRow()
+        if selected_row < 0:
+            QMessageBox.warning(self, "Sélection requise", "Veuillez sélectionner un colis.")
+            return
+            
+        try:
+            # Correction du problème logique : on utilise maintenant la référence du bon
+            bon_ref = self.table.item(selected_row, 3).text()
+            colis_id = int(self.table.item(selected_row, 0).text())
+            
+            # Recherche du bon correspondant
+            bons = get_pending_expeditions(self.db_conn)
+            bon_trouve = None
+            
+            for bon in bons:
+                if bon['reference'] == bon_ref:
+                    bon_trouve = bon
+                    break
+                    
+            if not bon_trouve:
+                raise ValueError("Bon d'expédition non trouvé")
+                
+            handle_confirmer_livraison(self.db_conn, bon_trouve['idBon'])
+            QMessageBox.information(self, "Succès", "Colis marqué comme livré.")
+            self.charger_colis()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de confirmation : {str(e)}")
