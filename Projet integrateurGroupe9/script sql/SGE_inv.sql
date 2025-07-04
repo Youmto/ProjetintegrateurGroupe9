@@ -12,7 +12,6 @@ SET search_path = public;
 -- =============================================
 
 -- Vue inventaire global
-drop view vue_inventaire_global;
 CREATE OR REPLACE VIEW vue_inventaire_global AS
 SELECT
     p.idProduit,
@@ -39,8 +38,6 @@ GROUP BY p.idProduit, p.reference, p.nom, p.type;
 
 
 -- Vue emplacements avec taux d'occupation
-DROP VIEW IF EXISTS vue_emplacements_occupes;
-
 CREATE OR REPLACE VIEW vue_emplacements_occupes AS
 SELECT
     c.idCellule AS idCellule,
@@ -121,28 +118,58 @@ LEFT JOIN BON_RECEPTION br ON rc.idBon = br.idBon
 GROUP BY c.idColis, c.reference, c.dateCreation, c.statut, be.reference, br.reference;
 
 -- Vue mouvements de produits
-CREATE OR REPLACE FUNCTION mouvements_produit(p_idProduit INTEGER)
-RETURNS TABLE(
-    date_mouvement DATE,
+CREATE OR REPLACE FUNCTION mouvements_produit(p_id_produit INTEGER)
+RETURNS TABLE (
     type TEXT,
+    reference_bon dom_reference,
+    date dom_date,
     quantite INTEGER,
-    numero_lot TEXT,
-    cellule TEXT,
+    lot dom_reference,
+    cellule dom_reference,
     description TEXT
 ) AS $$
 BEGIN
     RETURN QUERY
-    SELECT
-        CURRENT_DATE,
-        'reception',
-        s.quantite,
-        l.numeroLot,
-        c.reference,
-        'Réception en cellule'
-    FROM STOCKER s
-    JOIN LOT l ON s.idLot = l.idLot
-    JOIN CELLULE c ON s.idCellule = c.idCellule
-    WHERE l.idProduit = p_idProduit;
+    SELECT * FROM (
+        -- Réceptions
+        SELECT
+            'Entrée'::TEXT,
+            br.reference,
+            br.dateReceptionPrevue,
+            ct.quantite,
+            l.numeroLot,
+            ce.reference,
+            'Réception bon #' || br.reference
+        FROM BON_RECEPTION br
+        JOIN RECEVOIR_COLIS rc ON rc.idBon = br.idBon
+        JOIN COLIS c ON rc.idColis = c.idColis
+        JOIN CONTENIR ct ON ct.idColis = c.idColis
+        JOIN LOT l ON l.idLot = ct.idLot
+        JOIN STOCKER s ON s.idLot = l.idLot
+        JOIN CELLULE ce ON ce.idCellule = s.idCellule
+        WHERE l.idProduit = p_id_produit
+
+        UNION ALL
+
+        -- Expéditions
+        SELECT
+            'Sortie'::TEXT,
+            be.reference,
+            be.dateExpeditionPrevue,
+            -ct.quantite,
+            l.numeroLot,
+            ce.reference,
+            'Expédition bon #' || be.reference
+        FROM BON_EXPEDITION be
+        JOIN EXPEDIER_COLIS ec ON ec.idBon = be.idBon
+        JOIN COLIS c ON ec.idColis = c.idColis
+        JOIN CONTENIR ct ON c.idColis = ct.idColis
+        JOIN LOT l ON l.idLot = ct.idLot
+        JOIN STOCKER s ON s.idLot = l.idLot
+        JOIN CELLULE ce ON ce.idCellule = s.idCellule
+        WHERE l.idProduit = p_id_produit
+    ) mouvements
+    ORDER BY date DESC;
 END;
 $$ LANGUAGE plpgsql;
 
