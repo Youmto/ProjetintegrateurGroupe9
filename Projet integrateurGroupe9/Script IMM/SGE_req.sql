@@ -100,7 +100,6 @@ WHERE be.dateExpeditionReelle IS NOT NULL;
 
 
 --vue approvisionnement 
-DROP VIEW IF EXISTS vue_approvisionnement;
 
 CREATE OR REPLACE VIEW vue_approvisionnement AS
 SELECT 
@@ -159,8 +158,6 @@ $$;
 -- =============================================
 -- 4. Mouvements d’un produit (réception / expédition)
 -- =============================================
-DROP FUNCTION IF EXISTS mouvements_produit(dom_id);
-
 CREATE OR REPLACE FUNCTION mouvements_produit(p_id_produit INTEGER)
 RETURNS TABLE (
     type TEXT,

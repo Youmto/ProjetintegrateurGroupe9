@@ -25,7 +25,7 @@ CREATE DOMAIN dom_quantite AS INTEGER CHECK (VALUE >= 0);
 CREATE DOMAIN dom_float AS FLOAT CHECK (VALUE >= 0);
 CREATE DOMAIN dom_position AS VARCHAR(50);
 CREATE DOMAIN dom_statut AS VARCHAR(20) CHECK (
-    VALUE IN ('actif', 'inactif', 'en_attente', 'en_cours', 'termine', 'annule', 'pret_a_expedier',)
+    VALUE IN ('actif', 'inactif', 'en_attente', 'en_cours', 'termine', 'annule', 'pret_a_expedier')
 );
 CREATE DOMAIN dom_type_produit AS VARCHAR(50) CHECK (VALUE IN ('materiel', 'logiciel', 'service'));
 CREATE DOMAIN dom_type_role AS VARCHAR(50) CHECK (
@@ -337,8 +337,6 @@ CREATE TABLE INVENTAIRE (
     FOREIGN KEY (idProduit) REFERENCES PRODUIT(idProduit),
     FOREIGN KEY (idOrganisation) REFERENCES ORGANISATION(idOrganisation)
 );
-
-
 
 --Ajouter colunm password
 ALTER TABLE INDIVIDU
