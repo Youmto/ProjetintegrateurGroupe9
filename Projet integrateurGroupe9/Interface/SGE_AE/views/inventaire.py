@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QLineEdit, QPushButton, QTableWidget, 
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QLineEdit, QPushButton, QTableWidget,
     QTableWidgetItem, QComboBox, QMessageBox,
     QHeaderView, QGroupBox, QFrame, QScrollArea,
     QGraphicsDropShadowEffect, QProgressBar, QToolButton,
@@ -8,9 +8,13 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QRect, pyqtSignal
 from PyQt5.QtGui import QFont, QPixmap, QIcon, QPalette, QColor, QPainter, QBrush
-from models.stock_model import search_products, get_product_details, get_stock_locations
-from controllers.supervision_controller import handle_ruptures, handle_occupation_cellules
-
+# Assurez-vous que ces imports sont corrects pour votre structure de projet
+from models.stock_model import (
+    search_products, get_product_details, get_stock_locations,
+    get_cellules_info # Nous allons utiliser cette fonction pour les emplacements
+)
+from controllers.supervision_controller import handle_ruptures # Assurez-vous que cette fonction existe et est correcte
+import datetime # Importation nécessaire pour la date de mise à jour
 
 class ModernCard(QFrame):
     """Carte moderne avec effet d'ombre et animations"""
@@ -28,7 +32,7 @@ class ModernCard(QFrame):
                 background-color: #f8f9fa;
             }
         """)
-        
+
         # Effet d'ombre
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(20)
@@ -40,15 +44,15 @@ class ModernCard(QFrame):
 class ModernSearchWidget(QWidget):
     """Widget de recherche moderne avec animations"""
     searchTriggered = pyqtSignal(str, str)
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.init_ui()
-        
+
     def init_ui(self):
         layout = QVBoxLayout()
         layout.setSpacing(16)
-        
+
         # Titre avec icône
         title_layout = QHBoxLayout()
         title_icon = QLabel("🔍")
@@ -64,11 +68,11 @@ class ModernSearchWidget(QWidget):
         title_layout.addWidget(title_label)
         title_layout.addStretch()
         layout.addLayout(title_layout)
-        
+
         # Ligne de recherche moderne
         search_layout = QHBoxLayout()
         search_layout.setSpacing(12)
-        
+
         # Champ de recherche avec style moderne
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("🔍 Rechercher un produit...")
@@ -89,7 +93,7 @@ class ModernSearchWidget(QWidget):
                 color: #7f8c8d;
             }
         """)
-        
+
         # ComboBox moderne
         self.search_type = QComboBox()
         self.search_type.addItems(["Tous", "Matériel", "Logiciel", "Emballage"])
@@ -120,7 +124,7 @@ class ModernSearchWidget(QWidget):
                 transform: rotate(45deg);
             }
         """)
-        
+
         # Boutons d'action modernes
         search_btn = QPushButton("🔍 Rechercher")
         search_btn.setStyleSheet("""
@@ -144,7 +148,7 @@ class ModernSearchWidget(QWidget):
                     stop: 0 #21618c, stop: 1 #1b4f72);
             }
         """)
-        
+
         out_of_stock_btn = QPushButton("⚠️ Ruptures")
         out_of_stock_btn.setStyleSheet("""
             QPushButton {
@@ -167,23 +171,23 @@ class ModernSearchWidget(QWidget):
                     stop: 0 #a93226, stop: 1 #922b21);
             }
         """)
-        
+
         search_layout.addWidget(self.search_input, 2)
         search_layout.addWidget(self.search_type)
         search_layout.addWidget(search_btn)
         search_layout.addWidget(out_of_stock_btn)
-        
+
         layout.addLayout(search_layout)
         self.setLayout(layout)
-        
+
         # Connexions
         search_btn.clicked.connect(self.trigger_search)
         out_of_stock_btn.clicked.connect(self.trigger_out_of_stock)
         self.search_input.returnPressed.connect(self.trigger_search)
-        
+
     def trigger_search(self):
         self.searchTriggered.emit(self.search_input.text(), self.search_type.currentText())
-        
+
     def trigger_out_of_stock(self):
         self.searchTriggered.emit("", "RUPTURES")
 
@@ -232,55 +236,66 @@ class StatsWidget(QWidget):
     """Widget d'affichage des statistiques"""
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.value_labels = {} # Dictionnaire pour stocker les références aux QLabel de valeur
         self.init_ui()
-        
+
     def init_ui(self):
         layout = QHBoxLayout()
         layout.setSpacing(16)
-        
+
         # Cartes de statistiques
-        stats = [
+        stats_data = [ # Renommé pour éviter le conflit avec l'attribut de classe
             ("📦", "Total Produits", "0", "#3498db"),
             ("⚠️", "En Rupture", "0", "#e74c3c"),
             ("📍", "Emplacements", "0", "#27ae60"),
             ("🔄", "Dernière MAJ", "Maintenant", "#f39c12")
         ]
-        
-        for icon, title, value, color in stats:
-            card = self.create_stat_card(icon, title, value, color)
+
+        for icon, title, initial_value, color in stats_data:
+            card = self.create_stat_card(icon, title, initial_value, color)
             layout.addWidget(card)
-        
+            # Stocker la référence au QLabel de la valeur pour pouvoir la mettre à jour
+            self.value_labels[title] = card.findChild(QLabel, f"{title}_value")
+
         self.setLayout(layout)
-        
+
     def create_stat_card(self, icon, title, value, color):
         """Crée une carte de statistique"""
         card = ModernCard()
         card.setFixedHeight(100)
-        
+
         card_layout = QVBoxLayout()
+        card_layout.setContentsMargins(15, 15, 15, 15) # Ajout de marges internes
         card_layout.setSpacing(8)
-        
+
         # Icône et titre
         top_layout = QHBoxLayout()
         icon_label = QLabel(icon)
         icon_label.setStyleSheet(f"font-size: 24px; color: {color};")
         title_label = QLabel(title)
         title_label.setStyleSheet(f"font-size: 12px; color: #7f8c8d; font-weight: bold;")
-        
+
         top_layout.addWidget(icon_label)
         top_layout.addWidget(title_label)
         top_layout.addStretch()
-        
+
         # Valeur
         value_label = QLabel(value)
         value_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {color};")
-        
+        # Donner un nom d'objet au QLabel pour pouvoir le retrouver facilement
+        value_label.setObjectName(f"{title}_value")
+
         card_layout.addLayout(top_layout)
         card_layout.addWidget(value_label)
         card_layout.addStretch()
-        
+
         card.setLayout(card_layout)
         return card
+
+    def update_card_value(self, title, new_value):
+        """Met à jour la valeur d'une carte spécifique par son titre."""
+        if title in self.value_labels:
+            self.value_labels[title].setText(str(new_value))
 
 
 class InventaireModule(QWidget):
@@ -291,16 +306,17 @@ class InventaireModule(QWidget):
         self.current_products = []
         self.init_ui()
         self.apply_modern_theme()
-        
+        self.update_stats() # Mettre à jour les statistiques au démarrage
+
     def init_ui(self):
         main_layout = QVBoxLayout()
         main_layout.setSpacing(20)
         main_layout.setContentsMargins(20, 20, 20, 20)
-        
+
         # En-tête avec titre et statistiques
         header_layout = QVBoxLayout()
         header_layout.setSpacing(16)
-        
+
         # Titre principal
         title_label = QLabel("📦 Gestion d'Inventaire")
         title_label.setStyleSheet("""
@@ -310,31 +326,31 @@ class InventaireModule(QWidget):
             padding: 16px 0;
         """)
         header_layout.addWidget(title_label)
-        
+
         # Widget des statistiques
         self.stats_widget = StatsWidget()
         header_layout.addWidget(self.stats_widget)
-        
+
         main_layout.addLayout(header_layout)
-        
+
         # Séparateur
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
         separator.setStyleSheet("background-color: #e1e5e9; height: 2px; border-radius: 1px;")
         main_layout.addWidget(separator)
-        
+
         # Widget de recherche moderne
         search_card = ModernCard()
         search_layout = QVBoxLayout()
         search_layout.setContentsMargins(20, 20, 20, 20)
-        
+
         self.search_widget = ModernSearchWidget()
         self.search_widget.searchTriggered.connect(self.handle_search)
         search_layout.addWidget(self.search_widget)
-        
+
         search_card.setLayout(search_layout)
         main_layout.addWidget(search_card)
-        
+
         # Splitter pour diviser la vue
         splitter = QSplitter(Qt.Horizontal)
         splitter.setStyleSheet("""
@@ -347,12 +363,12 @@ class InventaireModule(QWidget):
                 background-color: #3498db;
             }
         """)
-        
+
         # Section gauche - Tableau des produits
         left_widget = QWidget()
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         products_label = QLabel("📋 Liste des Produits")
         products_label.setStyleSheet("""
             font-size: 16px;
@@ -361,15 +377,15 @@ class InventaireModule(QWidget):
             padding: 8px 0;
         """)
         left_layout.addWidget(products_label)
-        
+
         # Tableau moderne
         self.products_table = ModernTableWidget()
         self.products_table.setColumnCount(8)
         self.products_table.setHorizontalHeaderLabels([
-            "ID", "Référence", "Nom", "Description", 
+            "ID", "Référence", "Nom", "Description",
             "Marque", "Modèle", "Type", "Emballage"
         ])
-        
+
         # Configuration des colonnes
         header = self.products_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -380,25 +396,25 @@ class InventaireModule(QWidget):
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
-        
+
         self.products_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.products_table.setAlternatingRowColors(True)
         self.products_table.doubleClicked.connect(self.show_product_details)
         left_layout.addWidget(self.products_table)
-        
+
         left_widget.setLayout(left_layout)
         splitter.addWidget(left_widget)
-        
+
         # Section droite - Détails du produit
         right_widget = QWidget()
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         # Conteneur pour les détails
         self.details_container = QWidget()
         details_main_layout = QVBoxLayout()
         details_main_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         # Message par défaut
         self.default_message = QLabel("👆 Sélectionnez un produit\npour voir ses détails")
         self.default_message.setAlignment(Qt.AlignCenter)
@@ -411,7 +427,7 @@ class InventaireModule(QWidget):
             background-color: #f8f9fa;
         """)
         details_main_layout.addWidget(self.default_message)
-        
+
         # Groupe de détails (caché par défaut)
         self.details_group = QGroupBox("🔍 Détails du Produit")
         self.details_group.setStyleSheet("""
@@ -432,10 +448,10 @@ class InventaireModule(QWidget):
             }
         """)
         self.details_group.setVisible(False)
-        
+
         details_layout = QVBoxLayout()
         details_layout.setSpacing(16)
-        
+
         # Titre du produit
         self.product_title = QLabel()
         self.product_title.setAlignment(Qt.AlignCenter)
@@ -449,7 +465,7 @@ class InventaireModule(QWidget):
             border: 1px solid #e1e5e9;
         """)
         details_layout.addWidget(self.product_title)
-        
+
         # Tableaux de détails
         self.details_table = ModernTableWidget()
         self.details_table.setColumnCount(2)
@@ -457,7 +473,7 @@ class InventaireModule(QWidget):
         self.details_table.horizontalHeader().setStretchLastSection(True)
         self.details_table.setMaximumHeight(300)
         details_layout.addWidget(self.details_table)
-        
+
         # Tableau des emplacements
         locations_label = QLabel("📍 Emplacements de Stockage")
         locations_label.setStyleSheet("""
@@ -467,7 +483,7 @@ class InventaireModule(QWidget):
             padding: 8px 0;
         """)
         details_layout.addWidget(locations_label)
-        
+
         self.locations_table = ModernTableWidget()
         self.locations_table.setColumnCount(4)
         self.locations_table.setHorizontalHeaderLabels([
@@ -475,22 +491,22 @@ class InventaireModule(QWidget):
         ])
         self.locations_table.setMaximumHeight(200)
         details_layout.addWidget(self.locations_table)
-        
+
         self.details_group.setLayout(details_layout)
         details_main_layout.addWidget(self.details_group)
-        
+
         self.details_container.setLayout(details_main_layout)
         right_layout.addWidget(self.details_container)
-        
+
         right_widget.setLayout(right_layout)
         splitter.addWidget(right_widget)
-        
+
         # Configuration du splitter
         splitter.setSizes([600, 400])
         main_layout.addWidget(splitter)
-        
+
         self.setLayout(main_layout)
-        
+
         # Barre de progression (cachée par défaut)
         self.progress_bar = QProgressBar()
         self.progress_bar.setStyleSheet("""
@@ -538,7 +554,7 @@ class InventaireModule(QWidget):
         """Affiche une barre de progression"""
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)  # Mode indéterminé
-        
+
     def hide_loading(self):
         """Cache la barre de progression"""
         self.progress_bar.setVisible(False)
@@ -554,13 +570,13 @@ class InventaireModule(QWidget):
     def handle_search(self, search_term, search_type):
         """Gestionnaire unifié pour toutes les recherches"""
         self.show_loading()
-        
+
         if search_type == "RUPTURES":
             self.load_out_of_stock()
         else:
             self.search_products(search_term, search_type)
-        
-        self.hide_loading()
+
+        self.hide_loading() # Mettre à jour les stats après chaque recherche ou chargement
 
     def search_products(self, search_term=None, product_type=None):
         """Recherche de produits améliorée"""
@@ -568,7 +584,7 @@ class InventaireModule(QWidget):
             search_term = ""
         if product_type is None:
             product_type = "Tous"
-            
+
         # Mapping pour le type de produit
         type_map = {
             "Matériel": "materiel",
@@ -576,28 +592,30 @@ class InventaireModule(QWidget):
             "Emballage": "emballage"
         }
         type_filter = None if product_type == "Tous" else type_map.get(product_type)
-        
+
         try:
             products = search_products(self.db_conn, search_term, type_filter)
             self.current_products = products
-            
+
             if not products:
                 self.show_info_message("Aucun résultat", "Aucun produit correspondant trouvé.")
                 self.products_table.setRowCount(0)
                 self.clear_details()
                 return
-            
+
             self.populate_products_table(products)
             self.clear_details()
-            
+
         except Exception as e:
             self.show_error_message("Erreur de recherche", f"Échec de la recherche: {str(e)}")
             self.clear_details()
+        finally:
+            self.update_stats() # Mettre à jour les stats après chaque recherche
 
     def populate_products_table(self, products):
         """Remplit le tableau des produits avec animation"""
         self.products_table.setRowCount(len(products))
-        
+
         for row, product in enumerate(products):
             # Ajout des données avec coloration conditionnelle
             items = [
@@ -610,10 +628,10 @@ class InventaireModule(QWidget):
                 product['type'],
                 "Oui" if product.get('estMaterielEmballage', False) else "Non"
             ]
-            
+
             for col, item_text in enumerate(items):
                 item = QTableWidgetItem(item_text)
-                
+
                 # Coloration selon le type
                 if col == 6:  # Colonne Type
                     if item_text == "materiel":
@@ -622,36 +640,61 @@ class InventaireModule(QWidget):
                         item.setBackground(QColor(227, 242, 253))  # Bleu clair
                     elif item_text == "emballage":
                         item.setBackground(QColor(255, 243, 224))  # Orange clair
-                
+
                 self.products_table.setItem(row, col, item)
-        
+
         self.products_table.resizeColumnsToContents()
-        
-        # Mise à jour des statistiques
-        self.update_stats()
+
 
     def update_stats(self):
-        """Met à jour les statistiques affichées"""
-        # Cette méthode peut être étendue pour calculer les vraies statistiques
-        pass
+        """Met à jour les statistiques affichées avec des données réelles
+        en utilisant uniquement les fonctions existantes de stock_model.
+        """
+        self.show_loading("Mise à jour des statistiques...")
+        try:
+            # 1. Total Produits : Utiliser search_products sans filtre pour obtenir tous les produits
+            all_products = search_products(self.db_conn)
+            total_products = len(all_products)
+
+            # 2. En Rupture : Utiliser handle_ruptures du contrôleur
+            out_of_stock_products = handle_ruptures(self.db_conn)
+            out_of_stock_count = len(out_of_stock_products)
+
+            # 3. Emplacements : Utiliser get_cellules_info et compter les cellules uniques
+            all_cells = get_cellules_info(self.db_conn)
+            unique_locations = len(all_cells) # Chaque entrée dans get_cellules_info est une cellule unique
+
+            # 4. Dernière MAJ : L'heure actuelle
+            last_update_time = datetime.datetime.now().strftime("%H:%M:%S")
+
+            self.stats_widget.update_card_value("Total Produits", total_products)
+            self.stats_widget.update_card_value("En Rupture", out_of_stock_count)
+            self.stats_widget.update_card_value("Emplacements", unique_locations)
+            self.stats_widget.update_card_value("Dernière MAJ", last_update_time)
+
+        except Exception as e:
+            self.show_error_message("Erreur de mise à jour des stats",
+                                    f"Impossible de charger les statistiques : {str(e)}")
+        finally:
+            self.hide_loading()
 
     def show_product_details(self, index):
         """Affiche les détails d'un produit avec interface améliorée"""
         if not index.isValid():
             return
-            
+
         try:
             self.show_loading("Chargement des détails...")
-            
+
             product_id = int(self.products_table.item(index.row(), 0).text())
-            
+
             product = get_product_details(self.db_conn, product_id)
             if not product:
                 raise ValueError("Produit non trouvé")
-            
+
             # Masquer le message par défaut
             self.default_message.setVisible(False)
-            
+
             # Titre du produit avec icône
             type_icons = {
                 "materiel": "🔧",
@@ -660,7 +703,7 @@ class InventaireModule(QWidget):
             }
             icon = type_icons.get(product['type'], "📦")
             self.product_title.setText(f"{icon} {product['reference']} - {product['nom']}")
-            
+
             # Construction des détails de base
             base_fields = [
                 ("🆔 ID Produit", product['idProduit']),
@@ -672,37 +715,37 @@ class InventaireModule(QWidget):
                 ("📦 Type", product['type'].capitalize()),
                 ("📦 Emballage", "Oui" if product.get('estMaterielEmballage', False) else "Non")
             ]
-            
+
             # Ajout des spécificités selon le type
-            if product['type'] == 'materiel':
+            if product['type'] == 'materiel' and product.get('longueur') is not None:
                 base_fields.extend([
-                    ("📏 Longueur", f"{product.get('longueur', 'N/A')} cm"),
-                    ("↔️ Largeur", f"{product.get('largeur', 'N/A')} cm"),
-                    ("↕️ Hauteur", f"{product.get('hauteur', 'N/A')} cm"),
-                    ("⚖️ Masse", f"{product.get('masse', 'N/A')} kg"),
-                    ("📐 Volume", f"{product.get('volume', 'N/A')} cm³")
+                    ("📏 Longueur", product.get('longueur', 'N/A')),
+                    ("↔️ Largeur", product.get('largeur', 'N/A')),
+                    ("↕️ Hauteur", product.get('hauteur', 'N/A')),
+                    ("⚖️ Masse", product.get('masse', 'N/A')),
+                    ("📐 Volume", product.get('volume', 'N/A'))
                 ])
-            elif product['type'] == 'logiciel':
+            elif product['type'] == 'logiciel' and product.get('version') is not None:
                 base_fields.extend([
                     ("🔢 Version", product.get('version', 'N/A')),
                     ("📜 Type de licence", product.get('typeLicence', 'N/A')),
                     ("📅 Date expiration", product.get('dateExpiration', 'N/A'))
                 ])
-            
+
             # Remplissage du tableau des détails
             self.details_table.setRowCount(len(base_fields))
             for row, (field_name, field_value) in enumerate(base_fields):
                 name_item = QTableWidgetItem(field_name)
                 name_item.setBackground(QColor(248, 249, 250))
                 value_item = QTableWidgetItem(str(field_value))
-                
+
                 self.details_table.setItem(row, 0, name_item)
                 self.details_table.setItem(row, 1, value_item)
-            
+
             # Affichage des emplacements de stockage
             locations = get_stock_locations(self.db_conn, product_id)
             self.locations_table.setRowCount(len(locations))
-            
+
             for row, loc in enumerate(locations):
                 items = [
                     loc.get('reference_cellule', ''),
@@ -710,10 +753,10 @@ class InventaireModule(QWidget):
                     str(loc.get('quantite', 0)),
                     loc.get('numeroLot', '')
                 ]
-                
+
                 for col, item_text in enumerate(items):
                     item = QTableWidgetItem(item_text)
-                    
+
                     # Coloration selon la quantité
                     if col == 2:  # Colonne Quantité
                         qty = int(item_text) if item_text.isdigit() else 0
@@ -723,48 +766,51 @@ class InventaireModule(QWidget):
                             item.setBackground(QColor(255, 243, 224))  # Orange clair pour stock faible
                         else:
                             item.setBackground(QColor(232, 245, 233))  # Vert clair pour stock OK
-                    
+
                     self.locations_table.setItem(row, col, item)
-            
+
             # Affichage du groupe de détails
             self.details_group.setVisible(True)
             self.details_table.resizeColumnsToContents()
             self.locations_table.resizeColumnsToContents()
-            
+
             self.hide_loading()
-            
+
         except Exception as e:
             self.hide_loading()
             self.show_error_message("Erreur de chargement", f"Échec du chargement des détails: {str(e)}")
             self.clear_details()
+        finally:
+            self.update_stats() # Mettre à jour les stats après l'affichage des détails
 
     def load_out_of_stock(self):
         """Charge les produits en rupture de stock avec interface améliorée"""
         try:
             self.show_loading("Recherche des ruptures de stock...")
-            
+
             products = handle_ruptures(self.db_conn)
             self.current_products = products
-            
+
             if not products:
                 self.show_info_message("Aucune rupture", "Aucun produit en rupture de stock trouvé. 🎉")
                 self.products_table.setRowCount(0)
                 self.clear_details()
                 return
-            
+
             self.populate_products_table(products)
             self.clear_details()
-            
+
             # Message d'alerte avec le nombre de produits
-            self.show_warning_message("Produits en rupture", 
-                                    f"⚠️ {len(products)} produits en rupture de stock trouvés.\n"
-                                    f"Veuillez prévoir un réapprovisionnement.")
-            
+            self.show_warning_message("Produits en rupture",
+                                      f"⚠️ {len(products)} produits en rupture de stock trouvés.\n"
+                                      f"Veuillez prévoir un réapprovisionnement.")
+
         except Exception as e:
             self.show_error_message("Erreur de chargement", f"Échec du chargement des ruptures: {str(e)}")
             self.clear_details()
         finally:
             self.hide_loading()
+            self.update_stats() # Mettre à jour les stats après le chargement des ruptures
 
     def show_info_message(self, title, message):
         """Affiche un message d'information stylisé"""
@@ -858,157 +904,29 @@ class InventaireModule(QWidget):
         if not self.current_products:
             self.show_info_message("Aucune donnée", "Aucun produit à exporter. Effectuez d'abord une recherche.")
             return
-        
+
         try:
-            from PyQt5.QtWidgets import QFileDialog
+            from PyQt5.QtWidgets import QFileDialog # Importation déplacée pour éviter l'erreur si non utilisée
             import csv
-            
-            filename, _ = QFileDialog.getSaveFileName(
-                self, "Exporter les données", "produits.csv", 
-                "Fichiers CSV (*.csv);;Tous les fichiers (*)")
-            
-            if filename:
-                with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-                    writer = csv.writer(csvfile)
-                    
-                    # En-têtes
-                    headers = ["ID", "Référence", "Nom", "Description", "Marque", "Modèle", "Type", "Emballage"]
-                    writer.writerow(headers)
-                    
-                    # Données
+
+            file_name, _ = QFileDialog.getSaveFileName(self, "Exporter en CSV", "produits.csv", "CSV Files (*.csv)")
+            if file_name:
+                with open(file_name, 'w', newline='', encoding='utf-8') as csvfile:
+                    fieldnames = ["ID", "Référence", "Nom", "Description", "Marque", "Modèle", "Type", "Emballage"]
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+                    writer.writeheader()
                     for product in self.current_products:
-                        row = [
-                            product['idProduit'],
-                            product['reference'],
-                            product['nom'],
-                            product.get('description', ''),
-                            product.get('marque', ''),
-                            product.get('modele', ''),
-                            product['type'],
-                            "Oui" if product.get('estMaterielEmballage', False) else "Non"
-                        ]
-                        writer.writerow(row)
-                
-                self.show_info_message("Export réussi", f"Données exportées avec succès vers:\n{filename}")
-                
+                        writer.writerow({
+                            "ID": product.get('idProduit', ''),
+                            "Référence": product.get('reference', ''),
+                            "Nom": product.get('nom', ''),
+                            "Description": product.get('description', ''),
+                            "Marque": product.get('marque', ''),
+                            "Modèle": product.get('modele', ''),
+                            "Type": product.get('type', ''),
+                            "Emballage": "Oui" if product.get('estMaterielEmballage', False) else "Non"
+                        })
+                self.show_info_message("Exportation réussie", f"Les données ont été exportées dans:\n{file_name}")
         except Exception as e:
-            self.show_error_message("Erreur d'export", f"Impossible d'exporter les données: {str(e)}")
-
-    def refresh_data(self):
-        """Actualise les données (fonctionnalité bonus)"""
-        self.show_loading("Actualisation des données...")
-        
-        # Simulation d'un délai d'actualisation
-        QTimer.singleShot(1000, self.finish_refresh)
-    
-    def finish_refresh(self):
-        """Termine l'actualisation des données"""
-        self.hide_loading()
-        self.show_info_message("Actualisation", "Données actualisées avec succès! 🔄")
-
-    def get_selected_product_id(self):
-        """Retourne l'ID du produit sélectionné"""
-        current_row = self.products_table.currentRow()
-        if current_row >= 0:
-            return int(self.products_table.item(current_row, 0).text())
-        return None
-
-    def highlight_search_results(self, search_term):
-        """Surligne les résultats de recherche dans le tableau"""
-        if not search_term:
-            return
-        
-        # Cette méthode peut être étendue pour surligner les termes recherchés
-        pass
-
-    def apply_filters(self):
-        """Applique des filtres avancés (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour des filtres plus complexes
-        pass
-
-    def show_product_history(self, product_id):
-        """Affiche l'historique d'un produit (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour afficher l'historique des mouvements
-        pass
-
-    def generate_qr_code(self, product_id):
-        """Génère un QR code pour le produit (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour générer des QR codes
-        pass
-
-    def setup_keyboard_shortcuts(self):
-        """Configure les raccourcis clavier (fonctionnalité bonus)"""
-        from PyQt5.QtWidgets import QShortcut
-        from PyQt5.QtGui import QKeySequence
-        
-        # Ctrl+F pour focus sur la recherche
-        search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
-        search_shortcut.activated.connect(lambda: self.search_widget.search_input.setFocus())
-        
-        # Ctrl+R pour actualiser
-        refresh_shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
-        refresh_shortcut.activated.connect(self.refresh_data)
-        
-        # Ctrl+E pour exporter
-        export_shortcut = QShortcut(QKeySequence("Ctrl+E"), self)
-        export_shortcut.activated.connect(self.export_to_csv)
-
-    def animate_widget(self, widget, property_name, start_value, end_value, duration=300):
-        """Anime un widget (fonctionnalité bonus)"""
-        animation = QPropertyAnimation(widget, property_name.encode())
-        animation.setDuration(duration)
-        animation.setStartValue(start_value)
-        animation.setEndValue(end_value)
-        animation.setEasingCurve(QEasingCurve.InOutQuad)
-        animation.start()
-        return animation
-
-    def setup_responsive_layout(self):
-        """Configure une mise en page responsive (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour adapter l'interface à différentes tailles d'écran
-        pass
-
-    def setup_theme_switcher(self):
-        """Configure un commutateur de thème (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour permettre le changement de thème
-        pass
-
-    def setup_accessibility_features(self):
-        """Configure les fonctionnalités d'accessibilité (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour améliorer l'accessibilité
-        pass
-
-    def setup_data_validation(self):
-        """Configure la validation des données (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour valider les entrées utilisateur
-        pass
-
-    def setup_auto_save(self):
-        """Configure la sauvegarde automatique (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour sauvegarder automatiquement les préférences
-        pass
-
-    def setup_search_history(self):
-        """Configure l'historique de recherche (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour mémoriser les recherches précédentes
-        pass
-
-    def setup_advanced_search(self):
-        """Configure la recherche avancée (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour des critères de recherche complexes
-        pass
-
-    def setup_bulk_operations(self):
-        """Configure les opérations en lot (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour permettre les opérations sur plusieurs produits
-        pass
-
-    def setup_notifications(self):
-        """Configure le système de notifications (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour afficher des notifications système
-        pass
-
-    def setup_reports(self):
-        """Configure la génération de rapports (fonctionnalité bonus)"""
-        # Cette méthode peut être étendue pour générer des rapports détaillés
-        pass
+            self.show_error_message("Erreur d'exportation", f"Échec de l'exportation CSV: {str(e)}")

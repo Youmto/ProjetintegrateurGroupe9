@@ -168,7 +168,7 @@ class MainWindow(QMainWindow):
         # Titre du menu / Logo
         logo_label = QLabel("SGE - Système de Gestion d'Entrepôt")
         logo_label.setAlignment(Qt.AlignCenter)
-        logo_label.setFont(QFont("Arial", 12, QFont.Bold))
+        logo_label.setFont(QFont("Arial", 7, QFont.Bold))
         logo_label.setStyleSheet("color: white; padding-bottom: 15px;")
         sidebar_layout.addWidget(logo_label)
 
