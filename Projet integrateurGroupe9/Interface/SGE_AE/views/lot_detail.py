@@ -4,10 +4,8 @@ from PyQt5.QtWidgets import (
     QComboBox, QFormLayout, QDialogButtonBox, QSpinBox, QDateEdit
 )
 from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QFont
 
 from models import lot_model
-
 
 
 class LotDetailWindow(QMainWindow):
@@ -17,8 +15,7 @@ class LotDetailWindow(QMainWindow):
         self.user = user
         self.id_lot = None
 
-        self.setWindowTitle("📦 Détails des lots")
-        self.resize(900, 500)
+        self.setWindowTitle("Détails des lots")
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -26,47 +23,14 @@ class LotDetailWindow(QMainWindow):
 
         self.lot_selector = QComboBox()
         self.lot_selector.currentIndexChanged.connect(self.on_lot_selected)
-        self.lot_selector.setStyleSheet("font-weight: bold; font-size: 14px; color: #2874A6;")
-        self.layout.addWidget(QLabel("🔍 Sélectionnez un lot"))
         self.layout.addWidget(self.lot_selector)
 
         self.table = QTableWidget()
-        self.table.setStyleSheet("""
-            QTableWidget {
-                background-color: #F0F8FF;
-                gridline-color: #AED6F1;
-                font-size: 13px;
-            }
-            QHeaderView::section {
-                background-color: #2980B9;
-                color: white;
-                font-weight: bold;
-                padding: 4px;
-            }
-        """)
         self.layout.addWidget(self.table)
 
         btn_layout = QHBoxLayout()
-        self.btn_modifier = QPushButton("✏️ Modifier")
-        self.btn_modifier.setStyleSheet("""
-            QPushButton {
-                background-color: #27AE60; color: white; font-weight: bold;
-                padding: 8px; border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #229954;
-            }
-        """)
-        self.btn_supprimer = QPushButton("🗑️ Supprimer")
-        self.btn_supprimer.setStyleSheet("""
-            QPushButton {
-                background-color: #C0392B; color: white; font-weight: bold;
-                padding: 8px; border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #922B21;
-            }
-        """)
+        self.btn_modifier = QPushButton("Modifier")
+        self.btn_supprimer = QPushButton("Supprimer")
         btn_layout.addWidget(self.btn_modifier)
         btn_layout.addWidget(self.btn_supprimer)
         self.layout.addLayout(btn_layout)
@@ -81,7 +45,7 @@ class LotDetailWindow(QMainWindow):
         self.lot_selector.clear()
         self.lots_map = {}
         for index, (id_lot, numero) in enumerate(lots):
-            self.lot_selector.addItem(f"📦 {numero} (ID {id_lot})")
+            self.lot_selector.addItem(f"{numero} (ID {id_lot})")
             self.lots_map[index] = id_lot
         if lots:
             self.id_lot = lots[0][0]
@@ -113,7 +77,7 @@ class LotDetailWindow(QMainWindow):
     def get_selection(self):
         row = self.table.currentRow()
         if row == -1:
-            QMessageBox.warning(self, "⚠️ Sélection requise", "Veuillez sélectionner un produit.")
+            QMessageBox.warning(self, "Sélection requise", "Veuillez sélectionner un produit.")
             return None
         id_colis = self.table.item(row, 0).text()
         id_produit = self.table.item(row, 1).text()
@@ -128,7 +92,6 @@ class LotDetailWindow(QMainWindow):
 
         dlg = ProduitEditDialog(self.conn, id_colis, id_produit, type_produit, parent=self)
         if dlg.exec_():
-            QMessageBox.information(self, "✔️ Modifié", "Le produit a été mis à jour avec succès.")
             self.charger_produits()
 
     def supprimer_produit(self):
@@ -137,13 +100,10 @@ class LotDetailWindow(QMainWindow):
             return
         id_colis, id_produit, _ = sel
 
-        confirm = QMessageBox.question(
-            self, "❌ Confirmation",
-            f"Supprimer le produit {id_produit} du colis {id_colis} ?"
-        )
+        confirm = QMessageBox.question(self, "Confirmation",
+                                       f"Supprimer le produit {id_produit} du colis {id_colis} ?")
         if confirm == QMessageBox.Yes:
             lot_model.supprimer_produit_dans_colis(self.conn, id_colis, id_produit)
-            QMessageBox.information(self, "🗑️ Supprimé", "Produit supprimé avec succès.")
             self.charger_produits()
 
 
@@ -155,8 +115,7 @@ class ProduitEditDialog(QDialog):
         self.id_produit = id_produit
         self.type_produit = type_produit
 
-        self.setWindowTitle("✏️ Modifier Produit")
-        self.resize(400, 300)
+        self.setWindowTitle("Modifier Produit")
         layout = QFormLayout(self)
 
         self.quantite = QSpinBox()
@@ -191,24 +150,6 @@ class ProduitEditDialog(QDialog):
         buttons.accepted.connect(self.submit)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
-
-        # Style général du dialog
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #E8F6F3;
-                font-size: 13px;
-            }
-            QLabel {
-                color: #21618C;
-                font-weight: bold;
-            }
-            QLineEdit, QSpinBox, QDateEdit {
-                background-color: white;
-                border: 1px solid #A9CCE3;
-                border-radius: 4px;
-                padding: 4px;
-            }
-        """)
 
     def submit(self):
         if self.type_produit == 'logiciel':

@@ -1,6 +1,7 @@
 import logging
 from SGE_AE.database import execute_query
 from datetime import date
+from psycopg2.extras import RealDictCursor
 
 
 
@@ -102,3 +103,27 @@ def mouvements_produit(conn, id_produit, date_debut=None, date_fin=None, type_mo
     except Exception as e:
         logger.error(f"[mouvements_produit] Erreur : {e}", exc_info=True)
         return []
+
+def get_product_movement_totals(conn, product_id):
+    """
+    Récupère les totaux agrégés (réceptions, expéditions, déplacements, mouvements aujourd'hui)
+    pour un produit donné. Ces totaux sont globaux pour le produit (sauf "aujourd'hui").
+    """
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            totals_query = """
+            SELECT
+                SUM(CASE WHEN type = 'Entrée' THEN quantite ELSE 0 END) AS "TotalReceptions",
+                SUM(CASE WHEN type = 'Sortie' THEN ABS(quantite) ELSE 0 END) AS "TotalExpeditions",
+                SUM(CASE WHEN type = 'Déplacement' THEN quantite ELSE 0 END) AS "TotalDeplacements",
+                SUM(CASE WHEN date = CURRENT_DATE::dom_date THEN 1 ELSE 0 END) AS "TotalMouvementsAujourdHui"
+            FROM
+                mouvements_produit(%s);
+            """
+            cur.execute(totals_query, (product_id,))
+            totals = cur.fetchone() # Il n'y aura qu'une seule ligne de totaux
+            logger.info(f"Totaux de mouvements récupérés pour le produit {product_id}: {totals}")
+            return totals if totals else {} # Retourne un dictionnaire ou un dictionnaire vide si aucun résultat
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des totaux pour le produit {product_id}: {e}", exc_info=True)
+        raise

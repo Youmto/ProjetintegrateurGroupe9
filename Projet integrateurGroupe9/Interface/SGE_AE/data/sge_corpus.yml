@@ -1,0 +1,23 @@
+greetings:
+  - "Bonjour, comment puis-je vous aider avec le SGE aujourd'hui?"
+  - "Bonjour! Posez-moi vos questions sur le système de gestion d'entrepôt."
+  - "Salut! Prêt à gérer votre inventaire?"
+
+goodbyes:
+  - "Au revoir! N'hésitez pas à revenir si vous avez d'autres questions."
+  - "Bonne journée! N'oubliez pas de vérifier vos stocks régulièrement."
+  - "À bientôt dans le système de gestion d'entrepôt!"
+
+help_responses:
+  inventaire: "Pour gérer l'inventaire, vous pouvez utiliser les vues 'vue_inventaire_global' ou 'produits_en_rupture()'."
+  reception: "Le processus de réception comprend la création d'un bon, l'enregistrement des lots et la mise à jour du statut."
+  expedition: "Pour préparer une expédition, créez un bon, préparez les colis avec 'preparer_colis()' et mettez à jour les statuts."
+  mouvement: "Utilisez 'deplacer_lot()' pour transférer des articles entre cellules et consultez 'DEPLACEMENT_LOG' pour l'historique."
+  produit: "Les produits sont classés en matériel et logiciel, avec des tables spécifiques pour chaque type."
+  rapport: "Les rapports d'exception permettent de tracer les problèmes de stock, réception ou expédition."
+  utilisateurs: "La gestion des utilisateurs se fait via les tables INDIVIDU, ROLE et AFFECTER_ROLE."
+
+unknown_questions:
+  - "Je n'ai pas compris votre question. Pouvez-vous reformuler en lien avec le SGE?"
+  - "Cette question ne semble pas concerner le système de gestion d'entrepôt."
+  - "Je suis spécialisé dans le SGE. Posez-moi une question sur l'inventaire, les réceptions ou les expéditions."

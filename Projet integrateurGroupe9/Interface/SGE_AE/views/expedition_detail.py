@@ -1,20 +1,53 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
-    QPushButton, QMessageBox, QHBoxLayout, QHeaderView, QSpacerItem, QSizePolicy, QFrame # Added QFrame for ModernCard
+    QPushButton, QMessageBox, QHBoxLayout, QHeaderView, QSizePolicy,
+    QFrame, QGraphicsDropShadowEffect, QSplitter, QScrollArea,
+    QSpacerItem, QApplication
 )
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont 
-import os
+from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QTimer
+from PyQt5.QtGui import QColor, QFont, QCursor
 
+# Assurez-vous que ce chemin est correct pour vos contrôleurs
+from controllers.expedition_controller import (
+    handle_get_colis_by_bon,
+    handle_get_contenu_colis,
+    handle_get_exceptions,
+    handle_valider_expedition, # Cette fonction est celle que vous devez modifier dans le contrôleur
+    handle_generer_bordereau_pdf,
+)
+import os
+import datetime
+
+# --- DÉFINITIONS DES CLASSES DE STYLE MODERNES ---
+# Ces classes sont laissées ici pour que le fichier soit autonome.
+# Pour une meilleure organisation, déplacez-les vers un fichier partagé (ex: utils/modern_widgets.py).
 
 class ModernCard(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setContentsMargins(15, 15, 15, 15)
-        self.setMinimumHeight(120)
+        self.setMinimumHeight(100)
 
+        self.initial_shadow = QGraphicsDropShadowEffect(self)
+        self.initial_shadow.setBlurRadius(20)
+        self.initial_shadow.setXOffset(0)
+        self.initial_shadow.setYOffset(5)
+        self.initial_shadow.setColor(QColor(0, 0, 0, 30))
         
+        self.hover_blur_radius = 35
+        self.hover_y_offset = 10
+        self.hover_shadow_color = QColor(0, 0, 0, 60)
 
+        self.setGraphicsEffect(self.initial_shadow)
+
+        self.blur_animation = QPropertyAnimation(self.initial_shadow, b"blurRadius")
+        self.blur_animation.setDuration(200)
+        self.blur_animation.setEasingCurve(QEasingCurve.OutQuad)
+
+        self.offset_animation = QPropertyAnimation(self.initial_shadow, b"yOffset")
+        self.offset_animation.setDuration(200)
+        self.offset_animation.setEasingCurve(QEasingCurve.OutQuad)
+        
         self.setStyleSheet("""
             ModernCard {
                 background-color: #FFFFFF;
@@ -23,8 +56,44 @@ class ModernCard(QFrame):
             }
         """)
 
-# Pas besoin de redéfinir ModernTableWidget en entier si elle est déjà dans le même fichier
-# ou importée depuis un fichier d'utilitaires commun. Assurez-vous simplement qu'elle est disponible.
+    def enterEvent(self, event):
+        self.setStyleSheet("""
+            ModernCard {
+                background-color: #FFFFFF;
+                border-radius: 12px;
+                border: 1px solid #B0D8FF;
+            }
+        """)
+        self.blur_animation.setStartValue(self.initial_shadow.blurRadius())
+        self.blur_animation.setEndValue(self.hover_blur_radius)
+        self.blur_animation.start()
+
+        self.offset_animation.setStartValue(self.initial_shadow.yOffset())
+        self.offset_animation.setEndValue(self.hover_y_offset)
+        self.offset_animation.start()
+
+        self.initial_shadow.setColor(self.hover_shadow_color)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.setStyleSheet("""
+            ModernCard {
+                background-color: #FFFFFF;
+                border-radius: 12px;
+                border: 1px solid #E0E0E0;
+            }
+        """)
+        self.blur_animation.setStartValue(self.initial_shadow.blurRadius())
+        self.blur_animation.setEndValue(20)
+        self.blur_animation.start()
+
+        self.offset_animation.setStartValue(self.initial_shadow.yOffset())
+        self.offset_animation.setEndValue(5)
+        self.offset_animation.start()
+
+        self.initial_shadow.setColor(QColor(0, 0, 0, 30))
+        super().leaveEvent(event)
+
 class ModernTableWidget(QTableWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -34,7 +103,7 @@ class ModernTableWidget(QTableWidget):
                 background-color: #FFFFFF;
                 border: 1px solid #E0E0E0;
                 border-radius: 8px;
-                selection-background-color: #E3F2FD; /* Bleu clair */
+                selection-background-color: #E3F2FD;
                 selection-color: #212121;
             }
             QTableWidget::item {
@@ -59,275 +128,396 @@ class ModernTableWidget(QTableWidget):
                 background-color: #E0E0E0;
                 border: 1px solid #9E9E9E;
             }
+            QScrollBar:vertical {
+                border: none;
+                background: #F0F0F0;
+                width: 10px;
+                margin: 0px 0px 0px 0px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #B0BEC5;
+                min-height: 20px;
+                border-radius: 5px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
         """)
         self.horizontalHeader().setStretchLastSection(True)
         self.verticalHeader().setVisible(False)
         self.setSelectionBehavior(QTableWidget.SelectRows)
         self.setSelectionMode(QTableWidget.SingleSelection)
 
+# --- FIN DES DÉFINITIONS DES CLASSES DE STYLE MODERNES ---
 
-# Importations des contrôleurs existants
-from controllers.expedition_controller import (
-    handle_get_colis_by_bon,
-    handle_get_contenu_colis,
-    handle_get_exceptions,
-    handle_valider_expedition,
-    handle_generer_bordereau_pdf,
-)
 
 def format_date(dt):
+    """Formate un objet datetime ou date en chaîne de caractères JJ/MM/AAAA."""
+    return dt.strftime("%d/%m/%Y") if isinstance(dt, (datetime.date, datetime.datetime)) else "—"
+
+def format_datetime(dt):
     """Formate un objet datetime en chaîne de caractères JJ/MM/AAAA HH:MM:SS."""
-    return dt.strftime("%d/%m/%Y %H:%M:%S") if dt else "—" # Inclure l'heure pour plus de détails
+    # CORRECTION ICI: %d/%m/%Y au lieu de %d/%d/%Y
+    return dt.strftime("%d/%m/%Y %H:%M:%S") if isinstance(dt, datetime.datetime) else "—"
+
 
 class ExpeditionDetailWindow(QWidget):
-    # Définit un signal pour notifier le parent lorsque la fenêtre est fermée ou que les données changent
-    # Utilisez 'finished' pour QDialogs, mais pour QWidget, un signal personnalisé est préférable
     data_changed = pyqtSignal()
     
     def __init__(self, db_conn, user, expedition_id):
-        """
-        Initialise la fenêtre de détail de l'expédition.
-
-        Args:
-            db_conn: La connexion à la base de données.
-            user: L'utilisateur actuel.
-            expedition_id: L'ID du bon d'expédition à afficher.
-        """
         super().__init__()
         self.conn = db_conn
         self.user = user
         self.expedition_id = expedition_id
-        self.setWindowTitle(f"Détail de l'expédition #{expedition_id}")
-        self.setMinimumSize(1000, 700) # Fenêtre légèrement plus grande
+        self.setWindowTitle(f"📦 Détail de l'expédition #{expedition_id}")
+        self.setMinimumSize(1000, 700)
+        
+        # Attributs pour l'affichage progressif
+        self._all_colis_data = []
+        self._current_colis_row_count = 0
+        self.COLIS_LOAD_CHUNK_SIZE = 20 # Nombre de colis à charger à chaque fois
+        self.colis_load_timer = QTimer(self)
+        self.colis_load_timer.timeout.connect(self._load_next_colis_chunk)
 
-        self.apply_modern_theme() # Applique la nouvelle feuille de style professionnelle
+        self._all_exceptions_data = []
+        self._current_exceptions_row_count = 0
+        self.EXCEPTIONS_LOAD_CHUNK_SIZE = 10 # Nombre d'exceptions à charger à chaque fois
+        self.exceptions_load_timer = QTimer(self)
+        self.exceptions_load_timer.timeout.connect(self._load_next_exceptions_chunk)
+
         self.init_ui()
-        self.load_data() # Chargement initial des données
+        self.load_data() # Charger les données après l'initialisation de l'UI
 
-    def apply_modern_theme(self):
-        """Applique les styles CSS modernes aux widgets."""
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #F8F9FA; /* Arrière-plan clair */
-                color: #212121;
-                font-family: 'Segoe UI', Arial, sans-serif;
-                font-size: 13px;
+    def init_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(25, 25, 25, 25)
+
+        # Titre principal avec icône
+        title = QLabel(f"📦 Détail du Bon d'Expédition <span style='color:#2196F3;'>#{self.expedition_id}</span>")
+        title.setFont(QFont("Arial", 26, QFont.Bold))
+        title.setStyleSheet("color: #263238;")
+        title.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(title)
+        
+        main_layout.addSpacerItem(QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Fixed))
+
+        # Utilisation de QSplitter pour une disposition flexible et redimensionnable
+        main_splitter = QSplitter(Qt.Vertical)
+        main_splitter.setHandleWidth(10)
+        main_splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #CFD8DC;
+                border: 1px solid #B0BEC5;
+                border-radius: 4px;
             }
-            QLabel#mainTitle {
-                font-size: 26px;
-                font-weight: bold;
-                color: #2C3E50; /* Gris-bleu plus foncé */
-                margin-bottom: 20px;
-                padding-bottom: 5px;
-                border-bottom: 2px solid #D1D8DD; /* Séparateur subtil */
+            QSplitter::handle:hover {
+                background-color: #90A4AE;
             }
-            QLabel#sectionHeader {
-                font-size: 18px;
-                font-weight: bold;
-                color: #34495E; /* Un autre gris-bleu foncé */
-                margin-top: 20px;
-                margin-bottom: 10px;
-                padding-left: 5px;
-                border-left: 5px solid #00BCD4; /* Accent sarcelle */
-            }
+        """)
+
+        # --- Section Colis (dans une ModernCard) ---
+        colis_card = ModernCard()
+        colis_layout = QVBoxLayout(colis_card)
+        colis_layout.setSpacing(10)
+
+        colis_label = QLabel("🚚 Liste des Colis :")
+        colis_label.setFont(QFont("Arial", 18, QFont.Bold))
+        colis_label.setStyleSheet("color: #37474F;")
+        colis_layout.addWidget(colis_label)
+
+        self.colis_table = ModernTableWidget()
+        self.colis_table.setColumnCount(4)
+        self.colis_table.setHorizontalHeaderLabels(["ID Colis", "Référence", "Date création", "Statut"])
+        self.colis_table.itemSelectionChanged.connect(self.show_contenu_colis)
+        self.colis_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.colis_table.verticalScrollBar().valueChanged.connect(self._check_scroll_colis)
+        colis_layout.addWidget(self.colis_table)
+        main_splitter.addWidget(colis_card)
+
+        # Conteneur pour le résumé des colis et les exceptions
+        bottom_splitter = QSplitter(Qt.Horizontal)
+        bottom_splitter.setHandleWidth(10)
+        bottom_splitter.setStyleSheet(main_splitter.styleSheet())
+
+        # --- Section Contenu du Colis (dans une ModernCard) ---
+        resume_card = ModernCard()
+        resume_layout = QVBoxLayout(resume_card)
+        resume_layout.setSpacing(10)
+
+        resume_label = QLabel("📋 Contenu du Colis Sélectionné :")
+        resume_label.setFont(QFont("Arial", 18, QFont.Bold))
+        resume_label.setStyleSheet("color: #37474F;")
+        resume_layout.addWidget(resume_label)
+
+        self.resume_table = ModernTableWidget()
+        self.resume_table.setColumnCount(4)
+        self.resume_table.setHorizontalHeaderLabels(["Lot", "Date prod.", "Qté", "Date exp."])
+        self.resume_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        resume_layout.addWidget(self.resume_table)
+        bottom_splitter.addWidget(resume_card)
+
+        # --- Section Exceptions (dans une ModernCard) ---
+        exceptions_card = ModernCard()
+        exceptions_layout = QVBoxLayout(exceptions_card)
+        exceptions_layout.setSpacing(10)
+
+        exceptions_label = QLabel("⚠️ Rapports d'Exception :")
+        exceptions_label.setFont(QFont("Arial", 18, QFont.Bold))
+        exceptions_label.setStyleSheet("color: #37474F;")
+        exceptions_layout.addWidget(exceptions_label)
+
+        self.exceptions_table = ModernTableWidget()
+        self.exceptions_table.setColumnCount(3)
+        self.exceptions_table.setHorizontalHeaderLabels(["Date", "Type", "Description"])
+        self.exceptions_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.exceptions_table.verticalScrollBar().valueChanged.connect(self._check_scroll_exceptions)
+        exceptions_layout.addWidget(self.exceptions_table)
+        bottom_splitter.addWidget(exceptions_card)
+
+        main_splitter.addWidget(bottom_splitter)
+        main_splitter.setSizes([self.height() // 2, self.height() // 2])
+        bottom_splitter.setSizes([self.width() // 2, self.width() // 2])
+
+        main_layout.addWidget(main_splitter)
+
+        # --- Section Boutons (avec QGraphicsDropShadowEffect) ---
+        btns_layout = QHBoxLayout()
+        btns_layout.addStretch()
+
+        # Base style for buttons (no box-shadow)
+        button_base_style = """
             QPushButton {
-                background-color: #00BCD4; /* Sarcelle */
                 color: white;
                 font-weight: bold;
-                border-radius: 8px;
-                padding: 10px 18px;
+                border-radius: 10px;
+                padding: 12px 20px;
                 border: none;
-                min-width: 160px; /* Boutons plus larges */
+                margin: 8px;
             }
-            QPushButton:hover {
-                background-color: #4DD0E1;
+        """
+        
+        # Helper to create button with shadow and hover effects
+        def create_shadowed_button(text, bg_color, hover_color, pressed_color, parent_widget, connect_func):
+            btn = QPushButton(text)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {bg_color};
+                    color: white;
+                    font-weight: bold;
+                    border-radius: 10px;
+                    padding: 12px 20px;
+                    border: none;
+                    margin: 8px;
+                }}
+                QPushButton:hover {{
+                    background-color: {hover_color};
+                }}
+                QPushButton:pressed {{
+                    background-color: {pressed_color};
+                }}
+            """)
+            
+            # Apply QGraphicsDropShadowEffect
+            shadow = QGraphicsDropShadowEffect(btn)
+            shadow.setBlurRadius(15) # Default shadow blur
+            shadow.setXOffset(0)
+            shadow.setYOffset(5)
+            shadow.setColor(QColor(0, 0, 0, 80)) # Darker shadow for buttons
+            btn.setGraphicsEffect(shadow)
+
+            # Animations for hover (similar to ModernCard)
+            blur_animation = QPropertyAnimation(shadow, b"blurRadius")
+            blur_animation.setDuration(150)
+            blur_animation.setEasingCurve(QEasingCurve.OutQuad)
+
+            offset_animation = QPropertyAnimation(shadow, b"yOffset")
+            offset_animation.setDuration(150)
+            offset_animation.setEasingCurve(QEasingCurve.OutQuad)
+
+            # Store animations on the button to prevent garbage collection
+            btn._blur_animation = blur_animation
+            btn._offset_animation = offset_animation
+
+            # Override enter/leave events for custom shadow animation
+            original_enter_event = btn.enterEvent
+            original_leave_event = btn.leaveEvent
+
+            def new_enter_event(event):
+                blur_animation.setStartValue(shadow.blurRadius())
+                blur_animation.setEndValue(25) # More blur on hover
+                blur_animation.start()
+
+                offset_animation.setStartValue(shadow.yOffset())
+                offset_animation.setEndValue(8) # Lift up slightly on hover
+                offset_animation.start()
+                original_enter_event(event)
+
+            def new_leave_event(event):
+                blur_animation.setStartValue(shadow.blurRadius())
+                blur_animation.setEndValue(15)
+                blur_animation.start()
+
+                offset_animation.setStartValue(shadow.yOffset())
+                offset_animation.setEndValue(5)
+                offset_animation.start()
+                original_leave_event(event)
+            
+            btn.enterEvent = new_enter_event
+            btn.leaveEvent = new_leave_event
+
+            btn.clicked.connect(connect_func)
+            return btn
+
+        valider_btn = create_shadowed_button(
+            "✅ Valider l'expédition", "#4CAF50", "#66BB6A", "#388E3C", self, self.valider_expedition
+        )
+        btns_layout.addWidget(valider_btn)
+
+        pdf_btn = create_shadowed_button(
+            "📄 Générer Bordereau PDF", "#2196F3", "#64B5F6", "#1976D2", self, self.generer_pdf
+        )
+        btns_layout.addWidget(pdf_btn)
+
+        refresh_btn = create_shadowed_button(
+            "🔄 Rafraîchir", "#607D8B", "#90A4AE", "#455A64", self, self.load_data
+        )
+        btns_layout.addWidget(refresh_btn)
+        
+        btns_layout.addStretch()
+
+        main_layout.addLayout(btns_layout)
+        
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #F8F9FA;
+                color: #212121;
+                font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
             }
-            QPushButton:pressed {
-                background-color: #0097A7;
-            }
-            QPushButton#validateButton {
-                background-color: #4CAF50; /* Vert pour la validation */
-            }
-            QPushButton#validateButton:hover {
-                background-color: #66BB6A;
-            }
-            QPushButton#validateButton:pressed {
-                background-color: #388E3C;
-            }
-            QPushButton#pdfButton {
-                background-color: #FF9800; /* Orange pour le PDF */
-            }
-            QPushButton#pdfButton:hover {
-                background-color: #FFB74D;
-            }
-            QPushButton#pdfButton:pressed {
-                background-color: #FB8C00;
-            }
-            QPushButton#refreshButton {
-                background-color: #607D8B; /* Gris-bleu pour le rafraîchissement */
-            }
-            QPushButton#refreshButton:hover {
-                background-color: #78909C;
-            }
-            QPushButton#refreshButton:pressed {
-                background-color: #455A64;
+            QLabel {
+                color: #37474F;
             }
             QMessageBox {
                 background-color: #FFFFFF;
                 color: #212121;
             }
-            QMessageBox QPushButton {
+            QMessageBox QPushButton { /* Styles for QMessageBox buttons, not main window buttons */
                 background-color: #42A5F5;
                 color: white;
                 border-radius: 5px;
                 padding: 5px 10px;
+                border: none; /* Ensure no default border */
             }
         """)
 
-    def init_ui(self):
-        """Initialise l'interface utilisateur de la fenêtre."""
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(25, 25, 25, 25)
-        main_layout.setSpacing(20)
-
-        # --- Titre Principal ---
-        title_label = QLabel(f"Détail du Bon d'Expédition #{self.expedition_id}")
-        title_label.setObjectName("mainTitle")
-        title_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(title_label)
-
-        # --- Section Liste des colis ---
-        colis_card = ModernCard()
-        colis_layout = QVBoxLayout(colis_card)
-        
-        colis_header = QLabel("📦 Colis Associés")
-        colis_header.setObjectName("sectionHeader")
-        colis_layout.addWidget(colis_header)
-
-        self.colis_table = ModernTableWidget()
-        self.colis_table.setColumnCount(4)
-        self.colis_table.setHorizontalHeaderLabels(["ID Colis", "Référence", "Date création", "Statut"])
-        self.colis_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.colis_table.setSelectionMode(QTableWidget.SingleSelection) # N'autorise qu'une seule sélection
-        # self.colis_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch) # Supprimé, utiliser stretch last
-        self.colis_table.doubleClicked.connect(self.show_contenu_colis)
-        colis_layout.addWidget(self.colis_table)
-        main_layout.addWidget(colis_card)
-
-        # --- Section Résumé du Contenu du Colis ---
-        resume_card = ModernCard()
-        resume_layout = QVBoxLayout(resume_card)
-
-        resume_header = QLabel("📋 Contenu du Colis Sélectionné")
-        resume_header.setObjectName("sectionHeader")
-        resume_layout.addWidget(resume_header)
-
-        self.resume_table = ModernTableWidget()
-        self.resume_table.setColumnCount(4)
-        self.resume_table.setHorizontalHeaderLabels(["Lot", "Date prod.", "Qté", "Date exp."])
-        # self.resume_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch) # Supprimé
-        resume_layout.addWidget(self.resume_table)
-        main_layout.addWidget(resume_card)
-
-        # --- Section Rapports d'Exception ---
-        exceptions_card = ModernCard()
-        exceptions_layout = QVBoxLayout(exceptions_card)
-
-        exceptions_header = QLabel("⚠️ Rapports d'Exception")
-        exceptions_header.setObjectName("sectionHeader")
-        exceptions_layout.addWidget(exceptions_header)
-
-        self.exceptions_table = ModernTableWidget()
-        self.exceptions_table.setColumnCount(3)
-        self.exceptions_table.setHorizontalHeaderLabels(["Date", "Type", "Description"])
-        # self.exceptions_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch) # Supprimé
-        exceptions_layout.addWidget(self.exceptions_table)
-        main_layout.addWidget(exceptions_card)
-
-        # --- Boutons d'Action ---
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(15) # Ajuste l'espacement entre les boutons
-
-        valider_btn = QPushButton("✅ Valider l'expédition")
-        valider_btn.setObjectName("validateButton") # Nom d'objet spécifique pour le style
-        valider_btn.clicked.connect(self.valider_expedition)
-        button_layout.addWidget(valider_btn)
-
-        pdf_btn = QPushButton("📄 Générer Bordereau PDF")
-        pdf_btn.setObjectName("pdfButton") # Nom d'objet spécifique pour le style
-        pdf_btn.clicked.connect(self.generer_pdf)
-        button_layout.addWidget(pdf_btn)
-
-        refresh_btn = QPushButton("🔄 Rafraîchir les Données")
-        refresh_btn.setObjectName("refreshButton") # Nom d'objet spécifique pour le style
-        refresh_btn.clicked.connect(self.load_data)
-        button_layout.addWidget(refresh_btn)
-        
-        # Ajoute un espace flexible pour pousser les boutons au centre ou à droite, ou les laisser groupés
-        button_layout.addStretch() 
-
-        main_layout.addLayout(button_layout)
-        
-        # Ajoute un espace flexible final pour pousser tout le contenu vers le haut, si désiré
-        main_layout.addStretch()
-
-    def load_expedition_data(self, new_expedition_id):
-        """
-        Méthode pour charger de nouvelles données d'expédition si la fenêtre est réutilisée.
-
-        Args:
-            new_expedition_id: Le nouvel ID du bon d'expédition à charger.
-        """
-        self.expedition_id = new_expedition_id
-        self.setWindowTitle(f"Détail de l'expédition #{self.expedition_id}")
-        self.load_data()
-
     def load_data(self):
-        """Charge toutes les données pour le détail de l'expédition."""
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
         try:
-            # Charger la liste des colis
-            colis_list = handle_get_colis_by_bon(self.conn, self.expedition_id)
-            self.colis_table.setRowCount(len(colis_list))
+            # Votre logique existante d'appel aux contrôleurs
+            self._all_colis_data = handle_get_colis_by_bon(self.conn, self.expedition_id)
+            self.colis_table.setRowCount(0)
+            self._current_colis_row_count = 0
+            self.colis_load_timer.stop()
+            self._load_next_colis_chunk()
 
-            for row, colis in enumerate(colis_list):
-                self.colis_table.setItem(row, 0, QTableWidgetItem(str(colis['idColis'])))
-                self.colis_table.setItem(row, 1, QTableWidgetItem(colis['reference']))
-                self.colis_table.setItem(row, 2, QTableWidgetItem(format_date(colis['dateCreation'])))
-                self.colis_table.setItem(row, 3, QTableWidgetItem(colis['statut']))
-            self.colis_table.resizeColumnsToContents()
+            self._all_exceptions_data = handle_get_exceptions(self.conn, self.expedition_id)
+            self.exceptions_table.setRowCount(0)
+            self._current_exceptions_row_count = 0
+            self.exceptions_load_timer.stop()
+            self._load_next_exceptions_chunk()
 
-            # Sélectionne le premier colis si disponible et charge son contenu
-            if colis_list:
-                self.colis_table.selectRow(0) # Sélectionne la première ligne
-                self.show_contenu_colis()
-            else:
-                self.resume_table.setRowCount(0) # Efface la table de résumé si aucun colis
-                QMessageBox.information(self, "Information", "Aucun colis associé à ce bon d'expédition.")
-
-            # Charger les exceptions
-            exceptions = handle_get_exceptions(self.conn, self.expedition_id)
-            self.exceptions_table.setRowCount(len(exceptions))
-            for row, ex in enumerate(exceptions):
-                self.exceptions_table.setItem(row, 0, QTableWidgetItem(format_date(ex['date'])))
-                self.exceptions_table.setItem(row, 1, QTableWidgetItem(ex.get('type', 'Non spécifié'))) # Gère le type manquant
-                self.exceptions_table.setItem(row, 2, QTableWidgetItem(ex['description']))
-            self.exceptions_table.resizeColumnsToContents()
+            self.resume_table.setRowCount(0)
             
-            self.data_changed.emit() # Émet le signal après le chargement/rafraîchissement des données
-
+            if self._all_colis_data:
+                QTimer.singleShot(100, lambda: self.colis_table.selectRow(0))
+            
         except Exception as e:
-            QMessageBox.critical(self, "Erreur de chargement", f"Impossible de charger les détails de l'expédition:\n{e}")
+            QMessageBox.critical(self, "Erreur de chargement", f"Impossible de charger les détails de l'expédition :\n{e}")
+        finally:
+            QApplication.restoreOverrideCursor()
+
+    def _load_next_colis_chunk(self):
+        start_index = self._current_colis_row_count
+        end_index = min(len(self._all_colis_data), start_index + self.COLIS_LOAD_CHUNK_SIZE)
+        
+        if start_index >= end_index:
+            self.colis_load_timer.stop()
+            return
+
+        self.colis_table.setUpdatesEnabled(False)
+        self.colis_table.setRowCount(end_index)
+        
+        for row in range(start_index, end_index):
+            colis = self._all_colis_data[row]
+            # Assurez-vous que les clés du dictionnaire 'colis' sont bien 'idColis', 'reference', 'dateCreation', 'statut'
+            # Cette date sera celle qui a été mise à jour par le contrôleur si l'expédition a été validée
+            self.colis_table.setItem(row, 0, QTableWidgetItem(str(colis['idColis'])))
+            self.colis_table.setItem(row, 1, QTableWidgetItem(colis['reference']))
+            self.colis_table.setItem(row, 2, QTableWidgetItem(format_datetime(colis['dateCreation'])))
+            self.colis_table.setItem(row, 3, QTableWidgetItem(colis['statut']))
+        
+        self.colis_table.setUpdatesEnabled(True)
+        self.colis_table.viewport().update()
+        self.colis_table.resizeColumnsToContents()
+        self._current_colis_row_count = end_index
+
+    def _check_scroll_colis(self, value):
+        scroll_bar = self.colis_table.verticalScrollBar()
+        # Adjusted condition: Check if scroll value is near the maximum, or if the table is small and has more data to load.
+        if value > 0 and (value >= scroll_bar.maximum() - 2 or (scroll_bar.maximum() == 0 and len(self._all_colis_data) > self._current_colis_row_count)):
+            if not self.colis_load_timer.isActive():
+                self.colis_load_timer.start(50)
+
+    def _load_next_exceptions_chunk(self):
+        start_index = self._current_exceptions_row_count
+        end_index = min(len(self._all_exceptions_data), start_index + self.EXCEPTIONS_LOAD_CHUNK_SIZE)
+        
+        if start_index >= end_index:
+            self.exceptions_load_timer.stop()
+            return
+
+        self.exceptions_table.setUpdatesEnabled(False)
+        self.exceptions_table.setRowCount(end_index)
+        
+        for row in range(start_index, end_index):
+            exception = self._all_exceptions_data[row]
+            # Assurez-vous que les clés du dictionnaire 'exception' sont bien 'date', 'type', 'description'
+            self.exceptions_table.setItem(row, 0, QTableWidgetItem(format_datetime(exception['date'])))
+            self.exceptions_table.setItem(row, 1, QTableWidgetItem(exception.get('type', '—')))
+            self.exceptions_table.setItem(row, 2, QTableWidgetItem(exception['description']))
+        
+        self.exceptions_table.setUpdatesEnabled(True)
+        self.exceptions_table.viewport().update()
+        self.exceptions_table.resizeColumnsToContents()
+        self._current_exceptions_row_count = end_index
+
+    def _check_scroll_exceptions(self, value):
+        scroll_bar = self.exceptions_table.verticalScrollBar()
+        if value > 0 and (value >= scroll_bar.maximum() - 2 or (scroll_bar.maximum() == 0 and len(self._all_exceptions_data) > self._current_exceptions_row_count)):
+            if not self.exceptions_load_timer.isActive():
+                self.exceptions_load_timer.start(50)
 
     def show_contenu_colis(self):
-        """Affiche le contenu du colis sélectionné."""
         try:
-            row = self.colis_table.currentRow()
-            if row < 0:
-                self.resume_table.setRowCount(0) # Efface si rien n'est sélectionné
+            selected_rows = self.colis_table.selectionModel().selectedRows()
+            if not selected_rows:
+                self.resume_table.setRowCount(0)
                 return
 
-            id_colis = int(self.colis_table.item(row, 0).text())
+            row = selected_rows[0].row()
+            id_colis_item = self.colis_table.item(row, 0)
+            if id_colis_item is None or not id_colis_item.text().isdigit():
+                self.resume_table.setRowCount(0)
+                return
+
+            id_colis = int(id_colis_item.text())
             contenu = handle_get_contenu_colis(self.conn, id_colis)
+            
             self.resume_table.setRowCount(len(contenu))
             for r, item in enumerate(contenu):
                 self.resume_table.setItem(r, 0, QTableWidgetItem(item.get('numeroLot', '—')))
@@ -339,46 +529,38 @@ class ExpeditionDetailWindow(QWidget):
             QMessageBox.critical(self, "Erreur", f"Erreur lors de l'affichage du contenu du colis:\n{str(e)}")
 
     def valider_expedition(self):
-        """Valide l'expédition."""
         try:
-            # Vous pouvez ajouter une boîte de dialogue de confirmation ici
             reply = QMessageBox.question(self, "Confirmer Validation", 
                                          f"Êtes-vous sûr de vouloir valider l'expédition #{self.expedition_id} ?",
                                          QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if reply == QMessageBox.No:
                 return
 
-            handle_valider_expedition(self.conn, self.expedition_id)
+            # C'est ici que handle_valider_expedition est appelée.
+            # Elle doit contenir la logique pour mettre à jour 'dateCreation' dans votre DB.
+            handle_valider_expedition(self.conn, self.expedition_id) 
+            
             QMessageBox.information(self, "Succès", f"L'expédition #{self.expedition_id} a été validée avec succès.")
-            self.load_data() # Rafraîchit les données pour refléter le changement de statut
-            self.data_changed.emit() # Notifie le parent que les données ont changé
+            
+            # Après la validation, on recharge les données pour que l'interface affiche la nouvelle date de création
+            self.load_data() 
+            self.data_changed.emit()
         except Exception as e:
             QMessageBox.critical(self, "Erreur de validation", f"Échec de la validation de l'expédition :\n{str(e)}")
 
     def generer_pdf(self):
-        """Génère le bordereau PDF."""
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
         try:
             file_path = handle_generer_bordereau_pdf(self.conn, self.expedition_id)
             if os.path.exists(file_path):
-                QMessageBox.information(self, "PDF Généré", f"Le bordereau PDF a été enregistré sous :\n{file_path}")
-                # Optionnel : Ouvrir le fichier automatiquement pour l'utilisateur
-                # import sys, subprocess # Décommentez ces lignes si vous utilisez ceci
-                # if sys.platform == "win32":
-                #     os.startfile(file_path)
-                # elif sys.platform == "darwin":
-                #     subprocess.call(["open", file_path])
-                # else: # linux
-                #     subprocess.call(["xdg-open", file_path])
+                QMessageBox.information(self, "PDF généré", f"Bordereau enregistré sous :\n{file_path}")
             else:
-                raise FileNotFoundError("Le fichier PDF n'a pas été généré correctement. Veuillez vérifier les logs.")
+                raise FileNotFoundError("Le fichier n'a pas été généré correctement.")
         except Exception as e:
-            QMessageBox.critical(self, "Erreur PDF", f"Erreur lors de la génération du bordereau PDF :\n{str(e)}")
+            QMessageBox.critical(self, "Erreur PDF", f"Erreur génération PDF : {str(e)}")
+        finally:
+            QApplication.restoreOverrideCursor()
 
-    # Surcharge de closeEvent pour émettre un signal lorsque la fenêtre est fermée
     def closeEvent(self, event):
-        """
-        Gère l'événement de fermeture de la fenêtre.
-        Émet le signal data_changed avant de fermer.
-        """
         self.data_changed.emit()
         super().closeEvent(event)

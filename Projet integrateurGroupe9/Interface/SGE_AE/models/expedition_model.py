@@ -3,6 +3,7 @@ from fpdf import FPDF
 from SGE_AE.database import execute_query
 
 logger = logging.getLogger(__name__)
+import datetime
 
 # =============================================================================
 # 1. Création et gestion des bons d’expédition
@@ -42,15 +43,18 @@ def get_pending_expeditions(conn):
 
 def valider_expedition(conn, id_bon):
     """
-    Passe le bon et tous ses colis liés au statut 'en_cours'.
+    Passe le bon et tous ses colis liés au statut 'en_cours'
+    et met à jour la date de création du bon à la date/heure actuelle.
     """
     try:
-        # 1. Le bon passe en cours uniquement s’il était prêt
+        current_datetime = datetime.datetime.now() # Obtenir la date et l'heure actuelles
+
+        # 1. Mettre à jour le bon : passe en cours UNIQUEMENT s’il était prêt, et met à jour dateCreation
         execute_query(conn, """
             UPDATE BON_EXPEDITION
-            SET statut = 'en_cours'
+            SET statut = 'en_cours', dateCreation = %s
             WHERE idBon = %s AND statut = 'pret_a_expedier';
-        """, (id_bon,))
+        """, (current_datetime, id_bon)) # Utilisez %s pour les paramètres si vous utilisez un connecteur Python qui l'attend (comme psycopg2 ou MySQL Connector/Python)
 
         # 2. Tous les colis liés à ce bon passent en_cours s’ils étaient prêts
         execute_query(conn, """
@@ -61,9 +65,15 @@ def valider_expedition(conn, id_bon):
             )
             AND statut = 'pret_a_expedier';
         """, (id_bon,))
+        
+        
+        logger.info(f"Expédition {id_bon} validée et dateCreation mise à jour à {current_datetime}.")
+
     except Exception as e:
+
         logger.error(f"[valider_expedition] Erreur : {e}", exc_info=True)
         raise
+
 
 def confirmer_livraison(conn, id_bon):
     try:

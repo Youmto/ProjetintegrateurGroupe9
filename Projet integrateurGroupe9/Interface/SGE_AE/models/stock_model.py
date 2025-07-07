@@ -59,28 +59,46 @@ def get_product_details(conn, product_id):
         row = execute_query(conn, query, (product_id,), fetch=True)
         if not row:
             return None
+        
         r = row[0]
+        
         product = {
-            'idProduit': r[0], 'reference': r[1], 'nom': r[2],
+            'idProduit': r[0],
+            'reference': r[1],
+            'nom': r[2],
             'description': r[3] or "Non renseignée",
             'marque': r[4] or "Non renseignée",
             'modele': r[5] or "Non renseigné",
             'type': r[6],
             'estMaterielEmballage': "Oui" if r[7] else "Non"
         }
-        if r[6] == 'materiel' and r[8]:
+
+        # Index des colonnes pour PRODUIT_MATERIEL et PRODUIT_LOGICIEL
+        # Assurez-vous que ces indices correspondent à l'ordre de votre SELECT
+        # pm.longueur (r[8]), pm.largeur (r[9]), pm.hauteur (r[10]), pm.masse (r[11]), pm.volume (r[12])
+        # pl.version (r[13]), pl.typeLicence (r[14]), pl.dateExpiration (r[15])
+
+        if r[6] == 'materiel':
+            # Stockez les valeurs numériques directement, pas les chaînes formatées
             product.update({
-                'longueur': f"{r[8]} cm", 'largeur': f"{r[9]} cm",
-                'hauteur': f"{r[10]} cm", 'masse': f"{r[11]} kg", 'volume': f"{r[12]} cm³"
+                'longueur': r[8],
+                'largeur': r[9],
+                'hauteur': r[10],
+                'masse': r[11],
+                'volume': r[12] 
             })
+        
+
         elif r[6] == 'logiciel':
             product.update({
-                'version': r[13], 'typeLicence': r[14],
+                'version': r[13],
+                'typeLicence': r[14],
                 'dateExpiration': r[15].strftime('%d/%m/%Y') if r[15] else "Illimitée"
             })
+        
         return product
     except Exception as e:
-        logger.error(f"[get_product_details] Erreur : {e}")
+        logger.error(f"[get_product_details] Erreur : {e}", exc_info=True) # exc_info=True pour le traceback complet
         return None
 
 def get_stock_locations(conn, product_id):
@@ -218,10 +236,6 @@ def get_entrepot_capacite_restante(conn, id_entrepot):
         return None
 
 
-def deplacer_lot(conn, id_lot, id_cellule_source, id_cellule_destination, quantite, id_responsable):
-    return execute_query(conn, "SELECT deplacer_lot(%s, %s, %s, %s, %s);", (id_lot, id_cellule_source, id_cellule_destination, quantite, id_responsable), fetch=True)[0][0]
-
-
 def receptionner_lot(conn, id_bon, ref_lot, id_produit, quantite, date_prod, date_exp, id_cellule):
     return execute_query(conn, "SELECT receptionner_lot(%s, %s, %s, %s, %s, %s, %s);", (id_bon, ref_lot, id_produit, quantite, date_prod, date_exp, id_cellule), fetch=True)[0][0]
 
@@ -245,15 +259,32 @@ def get_cellule_details(conn, id_cellule):
         "volume_restant": r[10],
         "taux_occupation": r[11]
     }
+# models/stock_model.py
+
 def get_lot_info(conn, id_lot):
-    rows = execute_query(conn, """
-    SELECT l.idLot, l.numeroLot, l.idProduit, l.quantiteDisponible,
-    p.type, pm.volume
+    """
+    Récupère les informations détaillées d'un lot, y compris son type,
+    son volume unitaire (si matériel), et sa première localisation connue
+    dans la table STOCKER avec la quantité associée.
+    """
+    query = """
+    SELECT 
+        l.idLot, 
+        l.numeroLot, 
+        l.idProduit, 
+        l.quantiteDisponible, -- Quantité totale disponible du lot (de la table LOT)
+        p.type, 
+        pm.volume,            -- Volume unitaire du produit matériel
+        s.idCellule,          -- ID de la cellule où ce lot est stocké (pris de la première entrée trouvée dans STOCKER)
+        s.quantite            -- Quantité de ce lot dans cette cellule spécifique (pris de la première entrée trouvée dans STOCKER)
     FROM LOT l
     JOIN PRODUIT p ON l.idProduit = p.idProduit
     LEFT JOIN PRODUIT_MATERIEL pm ON pm.idProduit = p.idProduit
-    WHERE l.idLot = %s;
-    """, (id_lot,), fetch=True)
+    LEFT JOIN STOCKER s ON s.idLot = l.idLot -- Joindre la table STOCKER pour obtenir l'emplacement et la quantité spécifique
+    WHERE l.idLot = %s
+    LIMIT 1; -- Limiter à 1 pour correspondre à l'attente de handle_deplacement d'un unique idCellule et quantite_actuelle_en_cellule
+    """
+    rows = execute_query(conn, query, (id_lot,), fetch=True)
 
     if not rows:
         return None
@@ -263,10 +294,33 @@ def get_lot_info(conn, id_lot):
         "idLot": row[0],
         "numeroLot": row[1],
         "idProduit": row[2],
-        "quantite_disponible": row[3],
+        "quantite_disponible": row[3], # Quantité totale du lot (peut être répartie sur plusieurs cellules)
         "type": row[4],
-        "volume_unitaire": row[5]
+        "volume_unitaire": row[5],
+        "idCellule": row[6], # L'ID de la cellule où ce lot est actuellement stocké (première trouvée)
+        "quantite_actuelle_en_cellule": row[7] # La quantité de ce lot dans cette 'idCellule'
     }
 
-    print("[DEBUG get_lot_info]", lot)  # ⬅️ Ajoute ceci temporairement
+    print("[DEBUG get_lot_info]", lot) # Laissez ceci pour le débogage si besoin
     return lot
+
+# models/stock_model.py
+
+def deplacer_lot(conn, id_lot, id_cellule_source, id_cellule_destination, quantite, id_responsable):
+    """
+    Appelle la fonction SQL deplacer_lot pour effectuer le déplacement physique du lot.
+    La fonction SQL gère la décrémentation de la source, l'incrémentation de la destination,
+    et le log du déplacement.
+    """
+    # La fonction SQL deplacer_lot renvoie un BOOLEAN. Nous le récupérons.
+    # Assurez-vous que execute_query gère les commits/rollbacks ou que la transaction est gérée au niveau supérieur.
+    # Dans le contexte de handle_deplacement, les rollbacks des erreurs psycopg2 sont gérés là-bas.
+    result = execute_query(conn, "SELECT deplacer_lot(%s, %s, %s, %s, %s);", 
+                           (id_lot, id_cellule_source, id_cellule_destination, quantite, id_responsable), 
+                           fetch=True)
+    
+    # La fonction SQL renvoie un tableau d'un seul élément (le booléen)
+    # par exemple: [(True,)]
+    if result and result[0] is not None:
+        return result[0][0] # Extrait le booléen (True/False)
+    return False # En cas de résultat inattendu

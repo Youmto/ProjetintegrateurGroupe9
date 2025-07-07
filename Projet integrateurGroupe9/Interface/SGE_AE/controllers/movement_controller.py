@@ -2,8 +2,10 @@ import logging
 from models.movement_model import (
     mouvements_produit,
     deplacer_lot,
-    ajuster_inventaire
+    ajuster_inventaire,
+    get_product_movement_totals
 )
+from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,27 @@ def handle_mouvements_produit(conn, produit_id, date_debut=None, date_fin=None, 
         logger.error(f"Erreur dans handle_mouvements_produit : {str(e)}", exc_info=True)
         return []
 
+def handle_get_product_movement_totals(conn, product_id):
+    """
+    Récupère les totaux des mouvements d'un produit.
+
+    Args:
+        conn: Connexion à la base de données
+        product_id (int): ID du produit
+
+    Returns:
+        dict: Totaux des mouvements (entrées, sorties, ajustements)
+    """
+    try:
+        if not isinstance(product_id, int) or product_id <= 0:
+            logger.warning(f"ID produit invalide : {product_id}")
+            return {}
+
+        return get_product_movement_totals(conn, product_id)
+
+    except Exception as e:
+        logger.error(f"Erreur dans handle_get_product_movement_totals : {str(e)}", exc_info=True)
+        return {}
 
 
 def handle_deplacer_lot(conn, lot_id, cellule_src, cellule_dest, quantite, responsable_id):

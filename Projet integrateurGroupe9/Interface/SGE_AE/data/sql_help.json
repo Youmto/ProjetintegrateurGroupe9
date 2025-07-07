@@ -1,0 +1,59 @@
+{
+  "inventaire": {
+    "description": "Gestion des stocks et inventaire. Permet de consulter les quantités disponibles, les produits en rupture et les dates d'expiration.",
+    "examples": [
+      "SELECT * FROM vue_inventaire_global; -- Vue complète de l'inventaire",
+      "SELECT * FROM produits_en_rupture(); -- Produits sans stock disponible",
+      "SELECT * FROM produits_expirant_bientot(30); -- Produits expirant dans 30 jours",
+      "SELECT ajuster_inventaire(123, 456, 50, 'Ajustement physique'); -- Corriger un écart de stock"
+    ]
+  },
+  "réception": {
+    "description": "Processus de réception des marchandises. Gestion des bons de réception, enregistrement des lots et mise à jour des stocks.",
+    "examples": [
+      "INSERT INTO BON_RECEPTION(reference, dateCreation, statut) VALUES ('BR-2023-001', CURRENT_DATE, 'en_attente');",
+      "SELECT receptionner_lot(1, 'LOT-123', 100, 50, '2023-01-01', '2025-01-01', 1);",
+      "UPDATE BON_RECEPTION SET statut='termine' WHERE idBon=1;"
+    ]
+  },
+  "expédition": {
+    "description": "Processus de préparation et d'expédition des commandes. Création de bons, préparation de colis et suivi des expéditions.",
+    "examples": [
+      "INSERT INTO BON_EXPEDITION(reference, dateCreation, priorite) VALUES ('BE-2023-001', CURRENT_DATE, 'urgente');",
+      "SELECT preparer_colis(1, 100, 5); -- Préparer un colis avec 5 unités du produit 100",
+      "UPDATE COLIS SET statut='expedie' WHERE idColis=1;"
+    ]
+  },
+  "mouvement": {
+    "description": "Gestion des transferts internes et ajustements de stock. Déplacement entre cellules et correction des écarts.",
+    "examples": [
+      "SELECT deplacer_lot(123, 1, 2, 10); -- Déplacer 10 unités du lot 123 de la cellule 1 à 2",
+      "SELECT * FROM DEPLACEMENT_LOG WHERE idLot=123; -- Historique des déplacements",
+      "SELECT ajuster_inventaire(123, 1, 25, 'Inventaire physique');"
+    ]
+  },
+  "produits": {
+    "description": "Gestion du catalogue produits. Enregistrement des caractéristiques spécifiques aux matériels et logiciels.",
+    "examples": [
+      "INSERT INTO PRODUIT(reference, nom, type) VALUES ('PROD-001', 'Ordinateur', 'materiel');",
+      "INSERT INTO PRODUIT_MATERIEL(idProduit, longueur, largeur) VALUES (1, 35.0, 25.0);",
+      "SELECT * FROM PRODUIT WHERE type='logiciel';"
+    ]
+  },
+  "rapports": {
+    "description": "Gestion des anomalies et rapports d'exception. Traçabilité des problèmes et écarts.",
+    "examples": [
+      "INSERT INTO RAPPORT_EXCEPTION(typeRapport, description) VALUES ('rupture', 'Stock épuisé pour produit 100');",
+      "SELECT * FROM RAPPORT_EXCEPTION WHERE dateGeneration > CURRENT_DATE - INTERVAL '7 days';",
+      "UPDATE RAPPORT_EXCEPTION SET statut='resolu' WHERE idRapport=1;"
+    ]
+  },
+  "utilisateurs": {
+    "description": "Gestion des comptes utilisateurs et des droits d'accès. Attribution des rôles dans l'organisation.",
+    "examples": [
+      "INSERT INTO INDIVIDU(nom, email) VALUES ('Jean Dupont', 'jean@entreprise.com');",
+      "INSERT INTO AFFECTER_ROLE(idIndividu, idOrganisation, idRole) VALUES (1, 1, 3);",
+      "SELECT * FROM INDIVIDU i JOIN AFFECTER_ROLE ar ON i.idIndividu=ar.idIndividu;"
+    ]
+  }
+}

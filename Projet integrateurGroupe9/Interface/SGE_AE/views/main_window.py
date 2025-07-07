@@ -28,7 +28,7 @@ from views.produits import ProduitsModule
 from views.cellules import CellulesModule
 from views.deplacement import DeplacementModule
 from views.livreur_confirmation import LivreurConfirmationWindow
-from views.lot_detail import LotDetailWindow
+from SGE_AE.views.lot import LotDetailWindow
 from views.approvisionnement import ApprovisionnementWindow
 from views.dashboard import DashboardModule
 
